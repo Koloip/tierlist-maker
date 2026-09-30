@@ -54,6 +54,7 @@ function setLang(l) {
   renderAll();
   if (view === 'cmp') { renderScope(); updateStats(); }
   if (view === 'res') renderResults();
+  spinLang();
 }
 $('#lang').innerHTML = Object.entries(I18N).map(([code, d]) => `<option value="${code}">${d.lang_name}</option>`).join('');
 $('#lang').onchange = e => setLang(e.target.value);
@@ -62,8 +63,13 @@ if (REPO_URL) { $('#ghLink').href = REPO_URL; $('#ghLink').hidden = false; }
 /* ================= storage ================= */
 function openDB() {
   return new Promise((res, rej) => {
-    const r = indexedDB.open('tierlist-maker', 1);
-    r.onupgradeneeded = () => { r.result.createObjectStore('images', {keyPath: 'id'}); r.result.createObjectStore('kv'); };
+    const r = indexedDB.open('tierlist-maker', 2);
+    r.onupgradeneeded = () => {
+      const d = r.result, has = n => d.objectStoreNames.contains(n);
+      if (!has('images')) d.createObjectStore('images', {keyPath: 'id'});
+      if (!has('kv')) d.createObjectStore('kv');
+      if (!has('spin')) d.createObjectStore('spin', {keyPath: 'id'});  // wheel / case images
+    };
     r.onsuccess = () => res(r.result);
     r.onerror = () => rej(r.error);
   });
@@ -116,6 +122,7 @@ function makeEl(id) {
   d.append(img, cap);
   return d;
 }
+function isImageFile(f) { return f.type.startsWith('image/') || /\.(jpe?g|png|gif|webp|avif|bmp)$/i.test(f.name); }
 function el(id) { let e = els.get(id); if (!e) { e = makeEl(id); els.set(id, e); } return e; }
 function download(blob, name) {
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
@@ -277,6 +284,7 @@ document.addEventListener('drop', e => {
   }
   if (e.dataTransfer.types.includes('Files')) {
     e.preventDefault();
+    if (view === 'wheel' || view === 'case') { const m = view; filesFromDT(e.dataTransfer).then(files => addSpinFiles(files, m)); return; }
     const box = view === 'tier' ? dropBox(e.target) : null;
     const key = box ? box.dataset.list : 'pool';
     filesFromDT(e.dataTransfer).then(files => addFiles(files, key));
@@ -302,7 +310,7 @@ async function addFiles(files, key = 'pool') {
   const existing = new Set([...images.values()].map(i => i.key));
   const recs = [];
   for (const f of files) {
-    if (!(f.type.startsWith('image/') || /\.(jpe?g|png|gif|webp|avif|bmp)$/i.test(f.name))) continue;
+    if (!isImageFile(f)) continue;
     const k = f.name + '|' + f.size;
     if (existing.has(k)) continue;
     existing.add(k);
@@ -616,8 +624,11 @@ function setView(v) {
   document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x.dataset.view === v));
   document.querySelectorAll('.view').forEach(s => s.classList.toggle('active', s.id === 'view-' + v));
   document.querySelectorAll('.tier-only').forEach(x => x.style.display = v === 'tier' ? '' : 'none');
+  const spinView = v === 'wheel' || v === 'case';
+  document.querySelectorAll('.grid-opt').forEach(x => x.style.display = spinView ? 'none' : '');
   if (v === 'cmp') { renderScope(); showPair(); }
   if (v === 'res') renderResults();
+  if (spinView) spinShow(v);
 }
 document.querySelectorAll('.tab').forEach(x => x.onclick = () => setView(x.dataset.view));
 
@@ -629,6 +640,7 @@ function digitOf(e) {
 }
 document.addEventListener('keydown', e => {
   if ($('#tierModal').classList.contains('open')) { if (e.key === 'Escape') closeModal(); return; }
+  if (spinKey(e)) return;
   if (e.target.matches('input, textarea, select') || e.ctrlKey || e.altKey || e.metaKey) return;
   if (view === 'tier') {
     const targets = () => sel.size ? [...document.querySelectorAll('#view-tier .item.sel')].map(x => x.dataset.id) : hovered ? [hovered] : [];
@@ -656,6 +668,7 @@ document.addEventListener('keydown', e => {
 });
 
 /* ================= init ================= */
+spinSetup();
 setLang(detectLang());
 (async () => {
   try { db = await openDB(); }
@@ -673,5 +686,6 @@ setLang(detectLang());
   state.pool = state.pool.filter(keep);
   const missing = [...images.keys()].filter(id => !seen.has(id)).sort((a, b) => collator.compare(images.get(a).name, images.get(b).name));
   state.pool.push(...missing);
+  await spinLoad();
   applySettings(); renderAll(); setView(state.view || 'tier');
 })();

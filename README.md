@@ -11,6 +11,8 @@ No image limit, no account, no uploads, and it works offline.
 - **Handles hundreds of images.** Adjustable thumbnail size, a resizable unranked panel with search, and keyboard shortcuts for fast sorting.
 - **Pairwise comparison mode.** Pick the better of two images again and again, and an Elo rating builds your personal ranking. You can stop at any time; progress is saved.
 - **Results grid** sorted by rating, from your favourite down.
+- **Wheel of fortune** with any number of your own images (each one fills its segment) and optional captions or text-only options. Adjustable spin time, tick sound, and an option to remove the winner after each spin.
+- **Case opening** in the CS:GO style: a card strip with your images that slows down under the marker. Adjustable spin time, rarity colors per item and optional real CS:GO odds by rarity.
 - **Export to PNG** for both the tier list and the ranking grid.
 - **Private by design.** Images are stored in your browser (IndexedDB) and never leave your computer.
 - **11 languages:** English, Русский, Українська, Deutsch, Français, Español, Português, Polski, Türkçe, 简体中文, 日本語.
@@ -37,6 +39,7 @@ Then click **+ Folder** (or drag a folder of images onto the page). File names b
 | Compare | `↑` | Same |
 | Compare | `↓` / `Space` | Skip |
 | Compare | `Z` | Undo |
+| Wheel / Case | `Space` / `Enter` | Spin / open the case |
 
 Shortcuts use physical key positions, so they work on any keyboard layout.
 
@@ -66,6 +69,7 @@ Optionally, set `REPO_URL` at the top of `app.js` to show a GitHub icon in the h
 index.html   page layout
 style.css    styles
 app.js       all logic (tier list, drag & drop, Elo comparison, PNG export, storage)
+spin.js      wheel of fortune and case opening
 i18n.js      translations
 ```
 
@@ -87,6 +91,8 @@ No build step and no dependencies.
 - Сотни картинок без проблем: размер миниатюр настраивается, есть поиск и горячие клавиши (навести и нажать `1`–`9`).
 - **Режим попарного сравнения:** выбираешь, что нравится больше, из двух вариантов, и по рейтингу Эло строится твой личный топ. Остановиться можно в любой момент, прогресс сохраняется.
 - Сетка результатов от самого любимого и ниже.
+- **Колесо фортуны:** сколько угодно своих картинок (каждая растягивается на свой сектор), подписи по желанию или просто текстовые варианты. Настраиваемая длительность, звук, можно убирать выпавшее.
+- **Открытие кейсов как в CS:GO:** лента со своими картинками, которая тормозит под маркером. Настраиваемая длительность прокрута, цвет редкости у каждого предмета и, по желанию, настоящие шансы CS:GO.
 - Выгрузка тир-листа и рейтинга в PNG.
 - Картинки хранятся только в твоём браузере и никуда не отправляются.
 - 11 языков интерфейса.
