@@ -35,6 +35,7 @@
     <button class="tab" data-view="tier" data-i18n="tab_tier"></button>
     <button class="tab" data-view="cmp" data-i18n="tab_cmp"></button>
     <button class="tab" data-view="res" data-i18n="tab_res"></button>
+    <button class="tab" data-view="tour" data-i18n="tab_tour"></button>
     <button class="tab" data-view="wheel" data-i18n="tab_wheel"></button>
     <button class="tab" data-view="case" data-i18n="tab_case"></button>
   </div>
@@ -48,15 +49,19 @@
       </select>
     </label>
     <label class="grid-opt"><input type="checkbox" id="captions"> <span data-i18n="captions"></span></label>
+    <label class="grid-opt" data-i18n-title="zoom_tip"><input type="checkbox" id="zoomOpt"> <span data-i18n="zoom_opt"></span></label>
     <span class="spacer"></span>
     <span class="tier-only undo-btns">
       <button class="btn icon-btn" id="undoTier" data-i18n-title="undo_tip">↶</button>
       <button class="btn icon-btn" id="redoTier" data-i18n-title="redo_tip">↷</button>
     </span>
     <label class="tier-only"><span data-i18n="bg"></span> <input type="color" id="bg"></label>
+    <button class="btn icon-btn tier-only" id="bgReset" data-i18n-title="bg_reset" hidden>↺</button>
     <button class="btn tier-only" id="presentBtn" data-i18n="present"></button>
+    <button class="btn tier-only" id="revealBtn" data-i18n="reveal_btn" data-i18n-title="reveal_tip"></button>
     <button class="btn tier-only danger" id="resetBtn" data-i18n="reset"></button>
     <button class="btn primary tier-only" id="pngBtn" data-i18n="png"></button>
+    <button class="btn icon-btn" id="helpBtn" data-i18n-title="help_tip">?</button>
     <label class="lang-pick" data-i18n-title="lang">
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg>
       <select id="lang"></select>
@@ -78,8 +83,14 @@
     <div class="pool-head">
       <h3><span data-i18n="unranked"></span> <span class="muted" id="poolCount">0</span></h3>
       <input type="text" id="search" data-i18n-ph="search" style="width:180px">
-      <button class="btn" id="sortBtn" data-i18n="sort_az"></button>
-      <button class="btn" id="shuffleBtn" data-i18n="shuffle"></button>
+      <select id="sortSel">
+        <option value="" data-i18n="sort_ph"></option>
+        <option value="name" data-i18n="sort_az"></option>
+        <option value="rating" data-i18n="sort_rating"></option>
+        <option value="new" data-i18n="sort_new"></option>
+        <option value="old" data-i18n="sort_old"></option>
+        <option value="shuffle" data-i18n="shuffle"></option>
+      </select>
       <span class="spacer"></span>
       <button class="btn primary" id="addFilesBtn" data-i18n="add_files"></button>
       <button class="btn primary" id="addDirBtn" data-i18n="add_folder"></button>
@@ -106,6 +117,7 @@
     <div class="stats" id="stats"></div>
     <div class="pbar"><div id="pfill"></div></div>
   </div>
+  <div class="cmp-body">
   <div class="arena" id="arena">
     <div class="card" data-side="0"><img alt="" draggable="false"><div class="nm"></div></div>
     <div class="mid">
@@ -116,6 +128,8 @@
     <div class="card" data-side="1"><img alt="" draggable="false"><div class="nm"></div></div>
   </div>
   <div class="arena-empty" id="arenaEmpty" data-i18n="need2"></div>
+  <aside class="cmp-top" id="cmpTop"></aside>
+  </div>
   <div class="keys" data-i18n="keys"></div>
 </section>
 
@@ -129,6 +143,25 @@
     <button class="btn primary" id="resPng" data-i18n="png"></button>
   </div>
   <div class="grid scroll" id="grid"></div>
+</section>
+
+<!-- ============ TOURNAMENT ============ -->
+<section class="view" id="view-tour">
+  <div class="bar">
+    <span class="muted" data-i18n="cmp_in"></span>
+    <div class="scope" id="tourScope"></div>
+    <label><span data-i18n="tour_size"></span> <select id="tourSize"></select></label>
+    <label><span data-i18n="tour_seed"></span>
+      <select id="tourSeed"><option value="rating" data-i18n="tour_seed_rating"></option><option value="rand" data-i18n="tour_seed_rand"></option></select>
+    </label>
+    <label><input type="checkbox" id="tourElo"> <span data-i18n="tour_elo"></span></label>
+    <span class="spacer"></span>
+    <button class="btn" id="tourUndo" data-i18n="undo"></button>
+    <button class="btn primary" id="tourStart" data-i18n="tour_start"></button>
+  </div>
+  <div class="tour-stage" id="tourStage"></div>
+  <div class="tour-bracket scroll" id="tourBracket"></div>
+  <div class="keys" data-i18n="tour_keys"></div>
 </section>
 
 <!-- ============ WHEEL OF FORTUNE ============ -->
@@ -184,6 +217,7 @@
 <div id="selBar" hidden>
   <span id="selCount"></span>
   <div id="selTiers"></div>
+  <button class="btn icon-btn" id="selCard" data-i18n-title="card_open">✎</button>
   <button class="btn icon-btn" id="selPool">↩</button>
   <button class="btn icon-btn danger" id="selDel">🗑</button>
   <button class="btn icon-btn" id="selClear">✕</button>
@@ -224,10 +258,12 @@
   </div>
 </div>
 <canvas id="fx"></canvas>
-<div id="toast"></div>
+<div id="zoom" hidden><img alt=""><div class="zoom-name"></div><div class="zoom-note"></div></div>
+<div id="toast"><span id="toastMsg"></span><button class="btn" id="toastAct" hidden></button></div>
 
 <script src="i18n.js"></script>
 <script src="spin.js"></script>
+<script src="tour.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

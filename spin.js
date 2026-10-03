@@ -46,7 +46,9 @@ function spinSetup() {
         <input type="file" class="f-files" multiple accept="image/*" hidden>
         <input type="file" class="f-dir" webkitdirectory multiple hidden>
       </div>
-      <div class="slist scroll"></div>`;
+      <div class="slist scroll"></div>
+      <details class="hist"><summary><span data-i18n="hist_title"></span> <span class="muted hcount"></span></summary>
+        <div class="hist-list scroll"></div><button class="btn hclear" data-i18n="hist_clear"></button></details>`;
     const fFiles = side.querySelector('.f-files'), fDir = side.querySelector('.f-dir');
     side.querySelector('.side-btns').onclick = e => {
       const act = e.target.closest('[data-act]')?.dataset.act;
@@ -58,11 +60,12 @@ function spinSetup() {
       else if (act === 'equal') { cfg(m).items.forEach(it => it.w = 1); save(); updatePct(m); itemsChanged(m); }
       else if (act === 'clear') {
         const n = cfg(m).items.length;
-        if (n && confirm(t('c_sp_clear', {n}))) { cfg(m).items = []; save(); itemsChanged(m, true); gcSpinImages(); }
+        if (n) ask(t('c_sp_clear', {n}), t('sp_clear')).then(ok => { if (ok) { cfg(m).items = []; save(); itemsChanged(m, true); gcSpinImages(); } });
       }
     };
     fFiles.onchange = fDir.onchange = e => { addSpinFiles([...e.target.files], m); e.target.value = ''; };
     bindList(m, side.querySelector('.slist'));
+    side.querySelector('.hclear').onclick = () => { cfg(m).hist = []; save(); renderHist(m); };
     const sec = secOf(m), dur = sec.querySelector('.sdur'), snd = sec.querySelector('.ssound');
     dur.oninput = () => { cfg(m).dur = +dur.value; showDur(m); save(); };
     snd.onchange = () => { cfg(m).sound = snd.checked; save(); };
@@ -108,7 +111,7 @@ function spinLang() {
     const sec = secOf(m);
     sec.querySelector('.sdur').value = cfg(m).dur;
     sec.querySelector('.ssound').checked = cfg(m).sound;
-    showDur(m); renderSpinList(m);
+    showDur(m); renderSpinList(m); renderHist(m);
   }
   $('#wheelRemove').checked = cfg('wheel').removeWin;
   applyCaseAssets();
@@ -616,6 +619,7 @@ function openCase() {
 /* ================= result ================= */
 function showWin(m, it) {
   winShown = {m, it};
+  logWin(m, it);
   const body = $('#winBody'), im = imOf(it.img);
   body.innerHTML = '';
   $('#winCard').style.setProperty('--rc', m === 'case' ? RARITIES[it.r || 0].c : '#f5c518');
@@ -650,4 +654,27 @@ function spinKey(e) {
   if (e.target.matches('input, textarea, select, button') || e.ctrlKey || e.altKey || e.metaKey) return true;
   if (e.code === 'Space' || e.key === 'Enter') { e.preventDefault(); view === 'wheel' ? spinWheel() : openCase(); }
   return true;
+}
+
+/* ================= history ================= */
+// the last drops, newest first; the caption is copied so the entry stays readable if the item is removed later
+function logWin(m, it) {
+  const c = cfg(m);
+  c.hist = [{img: it.img || null, cap: it.cap || imOf(it.img)?.name || '', r: it.r || 0, at: Date.now()}, ...(c.hist || [])].slice(0, 100);
+  save(); renderHist(m);
+}
+function renderHist(m) {
+  const box = secOf(m).querySelector('.hist-list'), hist = cfg(m).hist || [];
+  secOf(m).querySelector('.hcount').textContent = hist.length || '';
+  if (!hist.length) { box.innerHTML = `<div class="muted hist-empty">${t('hist_empty')}</div>`; return; }
+  const fmt = new Intl.DateTimeFormat(lang, {hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit'});
+  box.replaceChildren(...hist.map(h => {
+    const row = document.createElement('div'), im = imOf(h.img);
+    row.className = 'hrow'; if (m === 'case') row.style.setProperty('--rc', RARITIES[h.r].c);
+    row.innerHTML = `<div class="sthumb">${im ? '<img alt="" loading="lazy">' : 'Aa'}</div><span class="hname"></span><span class="muted htime"></span>`;
+    if (im) row.querySelector('img').src = im.url;
+    row.querySelector('.hname').textContent = h.cap || '—';
+    row.querySelector('.htime').textContent = fmt.format(h.at);
+    return row;
+  }));
 }

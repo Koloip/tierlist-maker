@@ -19,7 +19,17 @@ No image limit, no account, no uploads, and it works offline.
 - **Undo / redo** (`Ctrl+Z` / `Ctrl+Y`) for everything you do with rows and images.
 - **Works on phones:** tap to select and pick a row in the bottom bar, or hold an image and drag it.
 - **Installable app (PWA):** install it from the browser menu and it opens in its own window, even offline.
-- **Export to PNG** for both the tier list and the ranking grid.
+- **Tournament:** a single-elimination bracket for 4–128 images (seeded by rating or at random), with a live bracket view, undo, a champion screen and the option to count every match in the rating.
+- **Reveal:** a presentation for streams where the images appear one by one from the bottom row up.
+- **Row templates** for a new list (S–D, S–F, 10–1, stars) and **drag rows by their label** to reorder them.
+- **Magnifier:** rest the cursor on an image to see it big with its name and note.
+- **Notes** on any image (when you played it, how many hours…) — shown in the magnifier and tooltip, searchable, saved in the file.
+- **Live top 10** next to the comparison, updated after every pick.
+- **Image card:** right-click an image (✎ on phones) to see it big, rename it, see its rating, move it or delete it.
+- **Search across all rows**, sorting of Unranked (by name, rating, date added, random), **Ctrl+V** to paste screenshots, **Ctrl+A** to select all.
+- **“Undo” right in the message** after resetting, clearing a row or putting images into tiers.
+- **Drop history** for the wheel and the case, plus your own **background** and **win sound** for the case and particle bursts by rarity.
+- **Export to PNG** for both the tier list and the ranking grid — optionally with a title, captions and Unranked, or **copy it to the clipboard** to paste into Discord.
 - **Private by design.** Images are stored in your browser (IndexedDB) and never leave your computer.
 - **11 languages:** English, Русский, Українська, Deutsch, Français, Español, Português, Polski, Türkçe, 简体中文, 日本語.
 
@@ -42,11 +52,18 @@ Then click **+ Folder** (or drag a folder of images onto the page). File names b
 | Tier list | `Del` | Remove from the project |
 | Tier list | `Esc` | Clear selection / exit presentation |
 | Tier list | `Ctrl+Z` / `Ctrl+Y` | Undo / redo |
+| Tier list | `Ctrl+A` | Select everything in Unranked |
+| Tier list | Right-click | Open the image card (rename, move, delete) |
+| Anywhere | `Ctrl+V` | Paste images from the clipboard |
+| Anywhere | `?` | Show all shortcuts |
 | Compare | `←` / `→` | Pick the left / right image |
 | Compare | `↑` | Same |
 | Compare | `↓` / `Space` | Skip |
 | Compare | `Z` | Undo |
 | Wheel / Case | `Space` / `Enter` | Spin / open the case |
+| Tournament | `←` / `→` | Pick the left / right image |
+| Tournament | `Z` | Undo the last match |
+| Reveal | `Space` / `→` / click, `←` | Show the next image / hide it again |
 
 Shortcuts use physical key positions, so they work on any keyboard layout.
 
@@ -80,6 +97,7 @@ index.html             page layout
 style.css              styles
 app.js                 tier list, drag & drop, undo, lists, save/open file, Elo comparison, PNG export, storage
 spin.js                wheel of fortune and case opening
+tour.js                single-elimination tournament
 i18n.js                translations
 sw.js                  service worker: offline mode of the installed app
 manifest.webmanifest   app name and icons for installing
@@ -114,7 +132,17 @@ No build step and no dependencies. The single-file version for releases is made 
 - **Отмена и повтор** (`Ctrl+Z` / `Ctrl+Y`).
 - **Работает на телефоне:** нажимаешь на картинки и выбираешь ряд на панели снизу или зажимаешь картинку и тащишь.
 - **Можно установить как приложение:** откроется в отдельном окне и будет работать без интернета.
-- Выгрузка тир-листа и рейтинга в PNG.
+- **Турнир на выбывание** на 4–128 картинок: посев по рейтингу или случайный, наглядная сетка, отмена матча, экран чемпиона, матчи можно учитывать в рейтинге.
+- **Раскрытие** — презентация для стримов: картинки появляются по одной, начиная с нижнего ряда.
+- **Шаблоны рядов** для нового списка (S–D, S–F, 10–1, звёзды) и **перетаскивание рядов** за подпись.
+- **Лупа:** задержи курсор на картинке — она покажется крупно с названием и заметкой.
+- **Заметки** к картинкам (когда проходил, сколько часов…) — видны в лупе и подсказке, по ним работает поиск.
+- **Живой топ-10** рядом со сравнением, обновляется после каждого выбора.
+- **Карточка картинки:** правый клик (на телефоне ✎) — крупный просмотр, переименование, рейтинг, перенос, удаление.
+- Поиск по всем рядам, сортировка нераспределённых, **Ctrl+V** вставляет скриншоты, **Ctrl+A** выделяет всё, **?** показывает все клавиши.
+- Кнопка **«Отменить»** прямо в сообщении после сброса и раскладки.
+- История выпадений в колесе и кейсе, свой фон и звук для кейса, частицы по редкости.
+- Выгрузка тир-листа и рейтинга в PNG — с заголовком, подписями и нераспределёнными по желанию, или **копирование в буфер**, чтобы сразу вставить в Discord.
 - Картинки хранятся только в твоём браузере и никуда не отправляются. Иногда делай **☰ → Сохранить в файл** как резервную копию.
 - 11 языков интерфейса.
 

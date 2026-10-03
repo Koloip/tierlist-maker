@@ -10,7 +10,7 @@ $html = Read-Src 'index.html'
 # a single local file cannot be installed as an app, so the PWA links are dropped
 $html = [regex]::Replace($html, '<link rel="(manifest|apple-touch-icon)"[^>]*>\r?\n', '')
 $html = $html.Replace('<link rel="stylesheet" href="style.css">', "<style>`n" + (Read-Src 'style.css') + "</style>")
-foreach ($js in 'i18n.js', 'spin.js', 'app.js') {
+foreach ($js in 'i18n.js', 'spin.js', 'tour.js', 'app.js') {
   $html = $html.Replace("<script src=""$js""></script>", "<script>`n" + (Read-Src $js) + "</script>")
 }
 if ($html -match '<script src=|href="style\.css"') { throw 'Some file was not inlined - check the tags in index.html' }

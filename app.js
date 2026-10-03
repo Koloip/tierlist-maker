@@ -98,20 +98,34 @@ function saveNow() {
 function save() { clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 250); }
 const saveMeta = () => tx('kv', 'readwrite', s => s.put(meta, 'meta'));
 
-function defaultState() {
+// row presets for a new list; their labels need no translation
+const TEMPLATES = {
+  sd: ['S', 'A', 'B', 'C', 'D'],
+  sf: ['S', 'A', 'B', 'C', 'D', 'E', 'F'],
+  ten: ['10', '9', '8', '7', '6', '5', '4', '3', '2', '1'],
+  stars: ['★★★★★', '★★★★', '★★★', '★★', '★'],
+};
+function defaultState(tpl = 'sd') {
+  const rows = TEMPLATES[tpl] || TEMPLATES.sd;
   return {
-    tiers: [['S',0],['A',1],['B',2],['C',3],['D',4]].map(([label, c]) => ({id: uid(), label, color: COLORS[c], items: []})),
+    tiers: rows.map((label, i) => ({id: uid(), label, color: COLORS[Math.round(i * Math.min(1, 9 / Math.max(1, rows.length - 1)))], items: []})),
     pool: [], elo: {}, history: [], scope: {}, topN: 0, cmpCount: 0, view: 'tier',
     settings: {}
   };
 }
-const DEFAULT_SETTINGS = {size: 120, aspect: 'portrait', captions: false, bg: '#1a1a17', poolH: 34, showUnrated: true};
+const DEFAULT_SETTINGS = {size: 120, aspect: 'portrait', captions: false, bg: '#1a1a17', poolH: 34, showUnrated: true, zoom: true, pngHead: false, pngCaps: false, pngPool: false};
 
 /* ================= helpers ================= */
-function toast(msg, ms = 2200) {
-  const el = $('#toast'); el.textContent = msg; el.classList.add('show');
+// action: {label, fn} adds a button to the message, e.g. "Undo"
+function toast(msg, ms = 2200, action) {
+  const el = $('#toast'), b = $('#toastAct');
+  $('#toastMsg').textContent = msg;
+  b.hidden = !action;
+  if (action) { b.textContent = action.label; b.onclick = () => { el.classList.remove('show'); action.fn(); }; }
+  el.classList.toggle('has-act', !!action); el.classList.add('show');
   clearTimeout(toast.timer); toast.timer = setTimeout(() => el.classList.remove('show'), ms);
 }
+const toastUndo = msg => toast(msg, 6000, {label: t('undo_act'), fn: undoTier});
 function cellW() {
   const s = state.settings;
   return Math.round(s.aspect === 'square' ? s.size : s.aspect === 'wide' ? s.size * 16 / 9 : s.size * 2 / 3);
@@ -133,7 +147,7 @@ function reconcile() {
 function makeEl(id) {
   const im = images.get(id);
   const d = document.createElement('div');
-  d.className = 'item'; d.draggable = !TOUCH; d.dataset.id = id; d.title = im.name;
+  d.className = 'item'; d.draggable = !TOUCH; d.dataset.id = id; d.title = tipOf(im);
   const img = new Image(); img.src = im.url; img.alt = ''; img.draggable = false; img.decoding = 'async';
   const cap = document.createElement('div'); cap.className = 'cap'; cap.textContent = im.name;
   d.append(img, cap);
@@ -149,19 +163,29 @@ function download(blob, name) {
 const fileSafe = s => (s || 'tierlist').replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 80) || 'tierlist';
 
 /* ================= dialogs & menu ================= */
-let dlgOk = null;
-// body: element or HTML string; onOk may return false to keep the dialog open
-function dialog({title, body, ok = t('ok'), onOk}) {
+let dlgOk = null, dlgCancel = null;
+// body: element or HTML string; onOk may return false to keep the dialog open; ok: null hides the OK button
+function dialog({title, body, ok = t('ok'), onOk, onCancel, danger = false, wide = false, cancel = t('cancel')}) {
   $('#dlgTitle').textContent = title;
   const b = $('#dlgBody'); b.replaceChildren();
   if (typeof body === 'string') b.innerHTML = body; else if (body) b.appendChild(body);
-  $('#dlgOk').textContent = ok; $('#dlgCancel').textContent = t('cancel');
-  dlgOk = onOk;
+  $('#dlgOk').hidden = ok === null; $('#dlgOk').textContent = ok || '';
+  $('#dlgOk').classList.toggle('danger-solid', danger);
+  $('#dlgCancel').textContent = cancel;
+  $('.dlg').classList.toggle('wide', wide);
+  dlgOk = onOk; dlgCancel = onCancel;
   $('#dlg').classList.add('open');
-  setTimeout(() => (b.querySelector('input[type=text]') || $('#dlgOk')).focus(), 0);
+  if (!TOUCH) setTimeout(() => (b.querySelector('input[type=text]') || ($('#dlgOk').hidden ? $('#dlgCancel') : $('#dlgOk'))).focus(), 0);
 }
-function closeDialog() { $('#dlg').classList.remove('open'); dlgOk = null; }
-async function confirmDialog() { const fn = dlgOk; if (fn && (await fn()) === false) return; closeDialog(); }
+function closeDialog() { const c = dlgCancel; $('#dlg').classList.remove('open'); dlgOk = dlgCancel = null; c?.(); }
+async function confirmDialog() {
+  if ($('#dlgOk').hidden) { closeDialog(); return; }
+  const fn = dlgOk; if (fn && (await fn()) === false) return;
+  dlgCancel = null; closeDialog();
+}
+// a styled replacement for confirm(): resolves to true or false
+const ask = (question, ok = t('ok'), danger = true) =>
+  new Promise(res => dialog({title: question, ok, danger, onOk: () => res(true), onCancel: () => res(false)}));
 $('#dlgOk').onclick = confirmDialog;
 $('#dlgCancel').onclick = closeDialog;
 $('#dlg').onmousedown = e => { if (e.target === $('#dlg')) closeDialog(); };
@@ -196,9 +220,21 @@ async function switchProject(id) {
   location.reload();
 }
 function newProj() {
-  askName(t('proj_new').replace(/^\+\s*|…$/g, ''), '', async name => {
-    const id = uid(); meta.projects.push({id, name}); await switchProject(id);
-  });
+  const body = document.createElement('div'); body.className = 'new-proj';
+  body.innerHTML = '<input type="text" class="dlg-input" maxlength="80"><div class="muted"></div><div class="tpls"></div>';
+  body.querySelector('.muted').textContent = t('proj_tpl');
+  let tpl = 'sd';
+  for (const [key, rows] of Object.entries(TEMPLATES)) {
+    const b = document.createElement('button'); b.className = 'btn tpl' + (key === tpl ? ' on' : ''); b.type = 'button';
+    b.textContent = rows.length > 5 ? `${rows[0]} … ${rows.at(-1)}` : rows.join(' ');
+    b.onclick = () => { tpl = key; body.querySelectorAll('.tpl').forEach(x => x.classList.toggle('on', x === b)); };
+    body.querySelector('.tpls').appendChild(b);
+  }
+  const inp = body.querySelector('input');
+  dialog({title: t('proj_new').replace(/^\+\s*|…$/g, ''), body, onOk: async () => {
+    const name = inp.value.trim(); if (!name) { inp.focus(); return false; }
+    const id = uid(); meta.projects.push({id, name, tpl}); await switchProject(id);
+  }});
 }
 function renameProj() {
   const p = meta.projects.find(x => x.id === project);
@@ -207,7 +243,7 @@ function renameProj() {
 async function deleteProj() {
   if (meta.projects.length < 2) { toast(t('t_proj_last')); return; }
   const p = meta.projects.find(x => x.id === project);
-  if (!confirm(t('c_proj_delete', {name: projName(p)}))) return;
+  if (!await ask(t('c_proj_delete', {name: projName(p)}), t('sel_del'))) return;
   clearTimeout(saveTimer);
   for (const store of ['images', 'spin']) {
     const ids = (await tx(store, 'readonly', s => s.getAll())).filter(r => projOf(r) === project).map(r => r.id);
@@ -236,12 +272,13 @@ async function exportProj() {
   await saveNow();
   const pack = async map => {
     const out = [];
-    for (const im of map.values()) out.push({id: im.id, name: im.name, key: im.key, type: im.blob.type, data: await blobToB64(im.blob)});
+    for (const im of map.values()) out.push({id: im.id, name: im.name, note: im.note || '', key: im.key, type: im.blob.type, data: await blobToB64(im.blob)});
     return out;
   };
   const p = meta.projects.find(x => x.id === project);
   const data = {format: FILE_FORMAT, version: 1, name: projName(p), state, images: await pack(images), spin: await pack(simgs)};
   download(new Blob([JSON.stringify(data)], {type: 'application/json'}), fileSafe(projName(p)) + '.tierlist.json');
+  p.backupAt = Date.now(); saveMeta();
   toast(t('t_exported'));
 }
 // opens the file as a new list; all ids are renewed so it never collides with lists already in this browser
@@ -251,7 +288,7 @@ async function importProj(file) {
   if (!data || data.format !== FILE_FORMAT || !data.state || !Array.isArray(data.images)) { toast(t('t_bad_file'), 4000); return; }
   toast(t('t_importing'), 60000);
   const id = uid(), map = new Map(), re = x => map.get(x) ?? x;
-  const recs = store => (data[store] || []).map(r => { const nid = uid(); map.set(r.id, nid); return {id: nid, project: id, name: r.name, key: r.key, blob: b64ToBlob(r.data, r.type)}; });
+  const recs = store => (data[store] || []).map(r => { const nid = uid(); map.set(r.id, nid); return {id: nid, project: id, name: r.name, note: r.note || '', key: r.key, blob: b64ToBlob(r.data, r.type)}; });
   const imgs = recs('images'), spins = recs('spin');
   const s = data.state;
   s.tiers = (s.tiers || []).map(x => ({...x, items: (x.items || []).map(re)}));
@@ -261,6 +298,10 @@ async function importProj(file) {
   if (s.spin) for (const m of Object.values(s.spin)) {
     (m.items || []).forEach(it => { if (it.img) it.img = re(it.img); });
     for (const k of ['bg', 'snd']) if (m[k]) m[k] = re(m[k]);
+  }
+  if (s.tour) {
+    s.tour.rounds.forEach(round => round.forEach(mt => { for (const k of ['a', 'b', 'w']) if (mt[k]) mt[k] = re(mt[k]); }));
+    s.tour.hist.forEach(h => { if (h.elo) { h.elo.a = re(h.elo.a); h.elo.b = re(h.elo.b); } });
   }
   await tx('images', 'readwrite', st => imgs.forEach(r => st.put(r)));
   await tx('spin', 'readwrite', st => spins.forEach(r => st.put(r)));
@@ -289,13 +330,15 @@ function applySettings() {
   r.setProperty('--tier-bg', s.bg);
   r.setProperty('--pool-h', s.poolH + 'vh');
   document.body.classList.toggle('captions', s.captions);
-  $('#size').value = s.size; $('#aspect').value = s.aspect; $('#captions').checked = s.captions;
+  $('#size').value = s.size; $('#aspect').value = s.aspect; $('#captions').checked = s.captions; $('#zoomOpt').checked = s.zoom;
   $('#bg').value = s.bg; $('#showUnrated').checked = s.showUnrated;
+  $('#bgReset').hidden = s.bg.toLowerCase() === DEFAULT_SETTINGS.bg;
 }
 $('#size').oninput = e => { state.settings.size = +e.target.value; applySettings(); save(); };
 $('#aspect').onchange = e => { state.settings.aspect = e.target.value; applySettings(); save(); };
 $('#captions').onchange = e => { state.settings.captions = e.target.checked; applySettings(); save(); };
 $('#bg').oninput = e => { state.settings.bg = e.target.value; applySettings(); save(); };
+$('#bgReset').onclick = () => { state.settings.bg = DEFAULT_SETTINGS.bg; applySettings(); save(); };
 
 /* ================= undo / redo (tier list layout) ================= */
 const undoStack = [], redoStack = [];
@@ -326,6 +369,7 @@ function renderTiers() {
       <div class="ctrl"><button class="gear">${GEAR}</button>
         <div class="arrows"><button class="up">${UP}</button><button class="down">${DOWN}</button></div></div>`;
     row.querySelector('.txt').textContent = tier.label;
+    row.querySelector('.label').draggable = !TOUCH;
     row.querySelector('.gear').title = t('row_settings');
     row.querySelector('.up').title = t('up');
     row.querySelector('.down').title = t('down');
@@ -352,9 +396,11 @@ function updateCounts() {
   });
 }
 function renderAll() { renderTiers(); renderPool(); updateCounts(); updateSelBar(); }
+// in Unranked the non-matching images are hidden; in the rows they are dimmed so the layout stays readable
 function applyFilter() {
-  const q = $('#search').value.trim().toLowerCase();
-  for (const id of state.pool) el(id).style.display = !q || images.get(id).name.toLowerCase().includes(q) ? '' : 'none';
+  const q = $('#search').value.trim().toLowerCase(), hit = id => !q || (images.get(id).name + ' ' + (images.get(id).note || '')).toLowerCase().includes(q);
+  for (const id of state.pool) el(id).style.display = hit(id) ? '' : 'none';
+  for (const x of state.tiers) for (const id of x.items) el(id).classList.toggle('dim', !hit(id));
 }
 $('#search').oninput = applyFilter;
 
@@ -392,13 +438,14 @@ function updateSelBar() {
       const b = document.createElement('button'); b.className = 'sel-tier'; b.style.background = x.color;
       b.textContent = (x.label.split('\n')[0] || '—').slice(0, 6); b.title = x.label; b.dataset.key = x.id; box.appendChild(b);
     });
+    $('#selCard').hidden = sel.size !== 1;
     $('#selPool').title = t('sel_to_pool'); $('#selDel').title = t('sel_del'); $('#selClear').title = t('sel_clear');
   });
 }
 $('#selTiers').onclick = e => { const b = e.target.closest('[data-key]'); if (b) moveTo(selected(), b.dataset.key); };
 $('#selPool').onclick = () => moveTo(selected(), 'pool');
 $('#selClear').onclick = clearSel;
-$('#selDel').onclick = () => { const ids = selected(); if (ids.length && confirm(t('c_delete', {n: ids.length}))) deleteImages(ids); };
+$('#selDel').onclick = async () => { const ids = selected(); if (ids.length && await ask(t('c_delete', {n: ids.length}), t('sel_del'))) deleteImages(ids); };
 
 let suppressClick = 0;
 document.addEventListener('click', e => {
@@ -463,8 +510,36 @@ function endDrag() {
   ph.remove();
   if (dragIds) dragIds.forEach(x => el(x).classList.remove('dragging'));
   dragIds = null;
+  rowDrag = rowTarget = null;
+  document.querySelectorAll('.row-dragging, .drop-before, .drop-after').forEach(x => x.classList.remove('row-dragging', 'drop-before', 'drop-after'));
+}
+// whole rows are dragged by their label (desktop); the arrows stay for phones
+let rowDrag = null, rowTarget = null;
+function rowDragOver(e) {
+  const row = e.target instanceof Element && e.target.closest('#tiers .tier');
+  document.querySelectorAll('.drop-before, .drop-after').forEach(x => x.classList.remove('drop-before', 'drop-after'));
+  autoscroll(e.target, e.clientY);
+  if (!row) { rowTarget = null; return; }
+  e.preventDefault();
+  const r = row.getBoundingClientRect(), after = e.clientY > r.top + r.height / 2;
+  row.classList.add(after ? 'drop-after' : 'drop-before');
+  rowTarget = {id: row.dataset.tier, after};
+}
+function rowDrop() {
+  if (!rowTarget || rowTarget.id === rowDrag) return;
+  snap();
+  const idx = id => state.tiers.findIndex(x => x.id === id);
+  const [moved] = state.tiers.splice(idx(rowDrag), 1);
+  state.tiers.splice(idx(rowTarget.id) + (rowTarget.after ? 1 : 0), 0, moved);
+  renderAll(); save();
 }
 document.addEventListener('dragstart', e => {
+  const lb = e.target.closest?.('#tiers .label');
+  if (lb) {
+    rowDrag = lb.parentNode.dataset.tier; lb.parentNode.classList.add('row-dragging');
+    e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'row');
+    return;
+  }
   const it = e.target.closest?.('.item'); if (!it || !it.dataset.id) return;
   beginDrag(it.dataset.id);
   e.dataTransfer.effectAllowed = 'move';
@@ -472,6 +547,7 @@ document.addEventListener('dragstart', e => {
 });
 document.addEventListener('dragend', endDrag);
 document.addEventListener('dragover', e => {
+  if (rowDrag) { rowDragOver(e); return; }
   const isFiles = !dragIds && [...e.dataTransfer.types].includes('Files');
   if (!dragIds && !isFiles) return;
   autoscroll(e.target, e.clientY);
@@ -480,6 +556,7 @@ document.addEventListener('dragover', e => {
   e.preventDefault(); e.dataTransfer.dropEffect = 'move';
 });
 document.addEventListener('drop', e => {
+  if (rowDrag) { e.preventDefault(); rowDrop(); return; }
   if (dragIds) { e.preventDefault(); finishDrop(); return; }
   if (e.dataTransfer.types.includes('Files')) {
     e.preventDefault();
@@ -600,22 +677,28 @@ $('#addDirBtn').onclick = () => $('#fDir').click();
 $('#fFiles').onchange = e => { addFiles([...e.target.files]); e.target.value = ''; };
 $('#fDir').onchange = e => { addFiles([...e.target.files]); e.target.value = ''; };
 $('#wipeBtn').onclick = async () => {
-  if (!images.size || !confirm(t('c_wipe', {n: images.size}))) return;
+  if (!images.size || !await ask(t('c_wipe', {n: images.size}), t('sel_del'))) return;
   await deleteImages([...images.keys()]);
   state.elo = {}; state.history = []; state.cmpCount = 0;
   undoStack.length = redoStack.length = 0; updateUndoBtns(); save();
 };
 $('#resetBtn').onclick = () => {
-  if (!confirm(t('c_reset'))) return;
   snap();
   state.tiers.forEach(x => { state.pool.push(...x.items); x.items = []; });
-  clearSel(); renderAll(); save();
+  clearSel(); renderAll(); save(); toastUndo(t('reset') + ' ✓');
 };
-$('#sortBtn').onclick = () => { snap(); state.pool.sort((a, b) => collator.compare(images.get(a).name, images.get(b).name)); renderPool(); save(); };
-$('#shuffleBtn').onclick = () => {
+// ids start with the time they were added (see uid), so sorting by id sorts by date
+const SORTS = {
+  name: (a, b) => collator.compare(images.get(a).name, images.get(b).name),
+  rating: (a, b) => (state.elo[b]?.n ? state.elo[b].r : -1e9) - (state.elo[a]?.n ? state.elo[a].r : -1e9) || SORTS.name(a, b),
+  new: (a, b) => (a < b ? 1 : a > b ? -1 : 0),
+  old: (a, b) => (a < b ? -1 : a > b ? 1 : 0),
+};
+$('#sortSel').onchange = e => {
+  const how = e.target.value; e.target.value = '';
+  if (!how || state.pool.length < 2) return;
   snap();
-  const p = state.pool;
-  for (let i = p.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [p[i], p[j]] = [p[j], p[i]]; }
+  if (how === 'shuffle') state.pool = shuffled(state.pool); else state.pool.sort(SORTS[how]);
   renderPool(); save();
 };
 
@@ -664,9 +747,9 @@ $('#mDel').onclick = () => {
   snapOnce();
   const i = state.tiers.findIndex(x => x.id === editTier);
   state.pool.push(...state.tiers[i].items); state.tiers.splice(i, 1);
-  delete state.scope[editTier]; closeModal(); renderAll(); save();
+  delete state.scope[editTier]; closeModal(); renderAll(); save(); toastUndo(t('m_delete') + ' ✓');
 };
-$('#mClear').onclick = () => { snapOnce(); const tier = curTier(); state.pool.push(...tier.items); tier.items = []; closeModal(); renderAll(); save(); };
+$('#mClear').onclick = () => { snapOnce(); const tier = curTier(); state.pool.push(...tier.items); tier.items = []; closeModal(); renderAll(); save(); toastUndo(t('m_clear') + ' ✓'); };
 $('#mAbove').onclick = () => { snapOnce(); const i = state.tiers.findIndex(x => x.id === editTier); state.tiers.splice(i, 0, newTier()); closeModal(); renderAll(); save(); };
 $('#mBelow').onclick = () => { snapOnce(); const i = state.tiers.findIndex(x => x.id === editTier); state.tiers.splice(i + 1, 0, newTier()); closeModal(); renderAll(); save(); };
 
@@ -677,8 +760,41 @@ $('#splitter').onpointerdown = e => {
   sp.onpointermove = ev => { state.settings.poolH = Math.min(80, Math.max(10, (innerHeight - ev.clientY) / innerHeight * 100)); applySettings(); };
   sp.onpointerup = sp.onpointercancel = () => { sp.onpointermove = sp.onpointerup = sp.onpointercancel = null; save(); };
 };
-function togglePresent(on) { document.body.classList.toggle('present', on); clearSel(); }
+function togglePresent(on) {
+  document.body.classList.toggle('present', on); clearSel();
+  if (!on && reveal) { reveal.order.forEach(id => els.get(id)?.classList.remove('unrev')); reveal = null; }
+}
 $('#presentBtn').onclick = () => togglePresent(true);
+
+// reveal: a presentation where the images appear one by one, from the bottom row up to the top — made for streams
+let reveal = null;
+$('#revealBtn').onclick = () => {
+  const order = [...state.tiers].reverse().flatMap(x => x.items);
+  if (!order.length) return;
+  togglePresent(true);
+  reveal = {order, i: 0};
+  order.forEach(id => el(id).classList.add('unrev'));
+};
+function revealStep(dir) {
+  if (dir > 0 && reveal.i < reveal.order.length) {
+    const e = el(reveal.order[reveal.i++]);
+    e.classList.remove('unrev'); e.classList.add('pop');
+    e.scrollIntoView({block: 'nearest'});
+    setTimeout(() => e.classList.remove('pop'), 600);
+    if (reveal.i === reveal.order.length) setTimeout(() => burst(...centerOf(e), 3), 250);
+  } else if (dir < 0 && reveal.i > 0) el(reveal.order[--reveal.i]).classList.add('unrev');
+}
+document.addEventListener('click', e => {
+  if (!reveal || e.target.closest('#exitPresent')) return;
+  e.stopPropagation(); revealStep(1);
+}, true);
+
+function remindBackup() {
+  const p = meta.projects.find(x => x.id === project), now = Date.now(), day = 864e5;
+  if (images.size < 10 || now - (p.backupAt || 0) < 14 * day || now - (p.remindAt || 0) < 3 * day) return;
+  p.remindAt = now; saveMeta();
+  setTimeout(() => toast(t('t_backup'), 12000, {label: t('exp').replace(/…$/, ''), fn: exportProj}), 2500);
+}
 $('#exitPresent').onclick = () => togglePresent(false);
 
 /* ================= PNG export ================= */
@@ -710,31 +826,73 @@ function wrapText(ctx, text, maxW) {
 function canvasToFile(cv, name) {
   cv.toBlob(b => { if (b) { download(b, name); toast(t('t_done')); } else toast(t('t_too_big')); }, 'image/png');
 }
-$('#pngBtn').onclick = async () => {
-  toast(t('t_building'), 20000);
-  const ch = state.settings.size, cw = cellW(), labelW = 110;
+// head: the list name on top; caps: names under the images; pool: Unranked as an extra grey row
+async function renderTierCanvas({head, caps, pool}) {
+  const ch = state.settings.size, cw = cellW(), labelW = 110, headH = head ? 64 : 0;
+  const rows = state.tiers.map(x => ({label: x.label, color: x.color, items: x.items}));
+  if (pool && state.pool.length) rows.push({label: t('unranked'), color: '#7a7a7a', items: state.pool});
   const boxW = document.querySelector('#tiers .items')?.clientWidth || 1000;
   const cols = Math.max(1, Math.floor(boxW / cw));
-  const heights = state.tiers.map(x => Math.max(1, Math.ceil(x.items.length / cols)) * ch);
-  const W = labelW + cols * cw, H = heights.reduce((a, b) => a + b, 0) + state.tiers.length - 1;
+  const heights = rows.map(x => Math.max(1, Math.ceil(x.items.length / cols)) * ch);
+  const W = labelW + cols * cw, H = headH + heights.reduce((a, b) => a + b, 0) + rows.length - 1;
   const sc = pickScale(W, H);
   const cv = document.createElement('canvas'); cv.width = Math.round(W * sc); cv.height = Math.round(H * sc);
   const ctx = cv.getContext('2d'); ctx.scale(sc, sc); ctx.imageSmoothingQuality = 'high';
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
-  const jobs = []; let y = 0;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  if (head) {
+    ctx.fillStyle = '#1c1c1c'; ctx.fillRect(0, 0, W, headH);
+    ctx.fillStyle = '#fff'; ctx.font = `700 30px system-ui, "Segoe UI", sans-serif`;
+    ctx.fillText(fitText(ctx, projName(meta.projects.find(p => p.id === project)), W - 40), W / 2, headH / 2);
+  }
+  const jobs = []; let y = headH;
   const fs = Math.min(30, Math.max(13, ch * .17));
-  state.tiers.forEach((tier, i) => {
+  rows.forEach((row, i) => {
     const h = heights[i];
-    ctx.fillStyle = tier.color; ctx.fillRect(0, y, labelW, h);
+    ctx.fillStyle = row.color; ctx.fillRect(0, y, labelW, h);
     ctx.fillStyle = state.settings.bg; ctx.fillRect(labelW, y, cols * cw, h);
-    ctx.fillStyle = '#111'; ctx.font = `${fs}px system-ui, "Segoe UI", sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    const lines = wrapText(ctx, tier.label, labelW - 12), lh = fs * 1.2;
+    ctx.fillStyle = '#111'; ctx.font = `${fs}px system-ui, "Segoe UI", sans-serif`;
+    const lines = wrapText(ctx, row.label, labelW - 12), lh = fs * 1.2;
     lines.forEach((ln, k) => ctx.fillText(ln, labelW / 2, y + h / 2 + (k - (lines.length - 1) / 2) * lh));
-    tier.items.forEach((id, k) => jobs.push([id, labelW + (k % cols) * cw, y + Math.floor(k / cols) * ch, cw, ch]));
+    row.items.forEach((id, k) => jobs.push([id, labelW + (k % cols) * cw, y + Math.floor(k / cols) * ch, cw, ch]));
     y += h + 1;
   });
   await drawImages(ctx, jobs);
-  canvasToFile(cv, 'tierlist.png');
+  if (caps) {
+    const cfs = Math.max(10, Math.min(16, cw * .11));
+    ctx.font = `600 ${cfs}px system-ui, "Segoe UI", sans-serif`;
+    for (const [id, x, yy, w, h] of jobs) {
+      const g = ctx.createLinearGradient(0, yy + h - cfs * 2.6, 0, yy + h);
+      g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.85)');
+      ctx.fillStyle = g; ctx.fillRect(x, yy + h - cfs * 2.6, w, cfs * 2.6);
+      ctx.fillStyle = '#fff'; ctx.fillText(fitText(ctx, images.get(id).name, w - 8), x + w / 2, yy + h - cfs * .8);
+    }
+  }
+  return cv;
+}
+$('#pngBtn').onclick = () => {
+  const s = state.settings, body = document.createElement('div'); body.className = 'png-opts';
+  for (const [key, label] of [['pngHead', 'png_head'], ['pngCaps', 'png_caps'], ['pngPool', 'png_pool']]) {
+    const l = document.createElement('label');
+    l.innerHTML = '<input type="checkbox"> <span></span>'; l.querySelector('span').textContent = t(label);
+    const c = l.querySelector('input'); c.checked = !!s[key]; c.onchange = () => { s[key] = c.checked; save(); };
+    body.appendChild(l);
+  }
+  const opts = () => ({head: s.pngHead, caps: s.pngCaps, pool: s.pngPool});
+  const copy = document.createElement('button'); copy.className = 'btn'; copy.textContent = '📋 ' + t('png_copy');
+  copy.onclick = () => {
+    if (!navigator.clipboard?.write || !window.ClipboardItem) { toast(t('t_copy_fail'), 4000); return; }
+    toast(t('t_building'), 20000);
+    // the blob is passed as a promise so the copy still counts as part of this click
+    const blob = renderTierCanvas(opts()).then(cv => new Promise(r => cv.toBlob(r, 'image/png')));
+    navigator.clipboard.write([new ClipboardItem({'image/png': blob})])
+      .then(() => { toast(t('t_copied'), 3500); closeDialog(); }).catch(() => toast(t('t_copy_fail'), 4000));
+  };
+  body.appendChild(copy);
+  dialog({title: t('png_title'), body, ok: '⬇ ' + t('png_dl'), onOk: async () => {
+    toast(t('t_building'), 20000);
+    canvasToFile(await renderTierCanvas(opts()), fileSafe(projName(meta.projects.find(p => p.id === project))) + '.png');
+  }});
 };
 
 /* ================= compare (Elo) ================= */
@@ -792,6 +950,7 @@ function showPair() {
   updateStats();
 }
 function updateStats() {
+  renderCmpTop();
   const ids = scopeIds(), n = ids.length;
   if (!n) { $('#stats').textContent = ''; $('#pfill').style.width = '0'; return; }
   const avg = ids.reduce((s, id) => s + eloOf(id).n, 0) / n;
@@ -799,18 +958,22 @@ function updateStats() {
   $('#stats').textContent = t('stats', {c: state.cmpCount || 0, n, a: avg.toFixed(1), t: target});
   $('#pfill').style.width = Math.min(100, avg / target * 100) + '%';
 }
-function vote(res) {  // 0 = left wins, 1 = right wins, 0.5 = draw
-  if (!pair) return;
-  const [a, b] = pair, A = eloOf(a), B = eloOf(b);
-  state.history.push({a, b, A: {...A}, B: {...B}});
-  if (state.history.length > 1000) state.history.shift();
-  const sa = res === 0 ? 1 : res === 1 ? 0 : .5;
+// one Elo game between a and b; sa is a's score (1 win, 0.5 draw, 0 loss). Returns what is needed to undo it
+function eloMatch(a, b, sa) {
+  const A = eloOf(a), B = eloOf(b), snap = {a, b, A: {...A}, B: {...B}};
   const ea = 1 / (1 + 10 ** ((B.r - A.r) / 400));
   const ka = K(A.n), kb = K(B.n);
   A.r += ka * (sa - ea); B.r += kb * (ea - sa);
   A.n++; B.n++;
   if (sa === 1) { A.w++; B.l++; } else if (sa === 0) { A.l++; B.w++; } else { A.d++; B.d++; }
   state.cmpCount = (state.cmpCount || 0) + 1;
+  return snap;
+}
+function vote(res) {  // 0 = left wins, 1 = right wins, 0.5 = draw
+  if (!pair) return;
+  const [a, b] = pair;
+  state.history.push(eloMatch(a, b, res === 0 ? 1 : res === 1 ? 0 : .5));
+  if (state.history.length > 1000) state.history.shift();
   recent.push(pkey(a, b)); if (recent.length > 60) recent.shift();
   if (res !== .5) { const c = document.querySelectorAll('#arena .card')[res]; c.classList.add('pick'); setTimeout(() => c.classList.remove('pick'), 120); }
   save(); pair = null; showPair();
@@ -826,8 +989,8 @@ document.querySelectorAll('#arena .card').forEach((c, i) => c.onclick = () => vo
 $('#drawBtn').onclick = () => vote(.5);
 $('#skipBtn').onclick = skip;
 $('#undoBtn').onclick = undo;
-$('#resetElo').onclick = () => {
-  if (!confirm(t('c_reset_elo'))) return;
+$('#resetElo').onclick = async () => {
+  if (!await ask(t('c_reset_elo'))) return;
   state.elo = {}; state.history = []; state.cmpCount = 0; recent.length = 0; pair = null; save(); showPair();
 };
 
@@ -843,7 +1006,7 @@ function renderResults() {
   [...rated, ...un].forEach((id, i) => {
     const im = images.get(id), e = eloOf(id), isR = i < rated.length;
     const d = document.createElement('div');
-    d.className = 'gitem' + (isR ? (i < 3 ? ' top' + (i + 1) : '') : ' unrated');
+    d.className = 'gitem' + (isR ? (i < 3 ? ' top' + (i + 1) : '') : ' unrated'); d.dataset.id = id;
     d.title = isR ? t('tip_rank', {name: im.name, i: i + 1, r: Math.round(e.r), w: e.w, l: e.l, d: e.d}) : t('tip_unrated', {name: im.name});
     d.innerHTML = (isR ? `<span class="rank">${i + 1}</span>` : '') + `<img alt="" draggable="false" loading="lazy"><div class="cap"></div>`;
     d.querySelector('img').src = im.url; d.querySelector('.cap').textContent = im.name;
@@ -909,9 +1072,135 @@ $('#autoTier').onclick = () => {
     let k = 0;
     state.tiers.forEach((x, i) => { x.items = [...rated.slice(k, k + cs[i]), ...x.items]; k += cs[i]; });
     renderAll(); save(); setView('tier');
-    toast(t('t_auto_done', {n: rated.length}));
+    toastUndo(t('t_auto_done', {n: rated.length}));
   }});
 };
+
+/* ================= magnifier ================= */
+// resting the cursor on a tile shows it big next to the cursor, with its name and note
+const zoom = $('#zoom');
+let zoomTimer = 0, zoomId = null;
+function hideZoom() { clearTimeout(zoomTimer); zoomId = null; zoom.hidden = true; }
+function placeZoom() {
+  const w = zoom.offsetWidth, h = zoom.offsetHeight, gap = 18;
+  let x = mx + gap; if (x + w > innerWidth - 8) x = mx - gap - w;
+  const y = Math.max(8, Math.min(innerHeight - h - 8, my - h / 2));
+  zoom.style.transform = `translate(${Math.max(8, x)}px, ${y}px)`;
+}
+function showZoom(id) {
+  const im = images.get(id); if (!im) return;
+  zoomId = id;
+  const img = zoom.querySelector('img'); img.onload = placeZoom; img.src = im.url;
+  zoom.querySelector('.zoom-name').textContent = im.name;
+  const n = zoom.querySelector('.zoom-note'); n.textContent = im.note || ''; n.hidden = !im.note;
+  zoom.hidden = false; placeZoom();
+}
+document.addEventListener('mouseover', e => {
+  const it = e.target.closest?.('#view-tier .item, #view-res .gitem');
+  if (!it) { if (zoomId || !zoom.hidden) hideZoom(); return; }
+  if (TOUCH || !state?.settings.zoom || dragIds || rowDrag || document.body.classList.contains('present') || it.dataset.id === zoomId) return;
+  hideZoom();
+  const id = it.dataset.id;
+  zoomId = id; zoomTimer = setTimeout(() => zoomId === id && showZoom(id), 550);
+});
+document.addEventListener('mousemove', () => { if (!zoom.hidden) placeZoom(); }, {passive: true});
+for (const ev of ['mousedown', 'wheel', 'keydown', 'dragstart']) document.addEventListener(ev, hideZoom, {passive: true, capture: true});
+$('#zoomOpt').onchange = e => { state.settings.zoom = e.target.checked; save(); hideZoom(); };
+
+/* ================= live top in Compare ================= */
+function renderCmpTop() {
+  const box = $('#cmpTop');
+  const ids = scopeBase().filter(id => state.elo[id]?.n).sort((a, b) => state.elo[b].r - state.elo[a].r).slice(0, 10);
+  box.hidden = !ids.length; if (!ids.length) return;
+  const h = document.createElement('h4'); h.textContent = t('cmp_top', {n: ids.length});
+  const ol = document.createElement('ol');
+  for (const id of ids) {
+    const im = images.get(id), li = document.createElement('li');
+    li.innerHTML = '<img alt="" loading="lazy"><span></span>';
+    li.querySelector('img').src = im.url; li.querySelector('span').textContent = im.name; li.title = tipOf(im);
+    ol.appendChild(li);
+  }
+  box.replaceChildren(h, ol);
+}
+
+/* ================= image card ================= */
+// big preview with renaming, rating, moving to a row and deleting; right-click on desktop, ✎ in the selection bar on phones
+function openCard(id) {
+  const im = images.get(id); if (!im) return;
+  const body = document.createElement('div'); body.className = 'card-view';
+  body.innerHTML = `<img alt=""><div class="card-side"><label class="card-name"><span class="muted"></span><input type="text" maxlength="120"></label>
+    <label class="card-name"><span class="muted card-note-lbl"></span><textarea class="card-note" rows="3" maxlength="1000"></textarea></label>
+    <div class="muted card-rating"></div><div class="muted card-move-lbl"></div><div class="card-rows"></div>
+    <button class="btn danger card-del"></button></div>`;
+  body.querySelector('img').src = im.url;
+  body.querySelector('.card-name span').textContent = t('card_name');
+  const inp = body.querySelector('input'); inp.value = im.name;
+  const note = body.querySelector('.card-note'); note.value = im.note || ''; note.placeholder = t('card_note_ph');
+  body.querySelector('.card-note-lbl').textContent = t('card_note');
+  const apply = () => updateImage(id, {name: inp.value, note: note.value});
+  const e = state.elo[id];
+  if (e?.n) {
+    const place = Object.keys(state.elo).filter(k => images.has(k) && state.elo[k].n).sort((a, b) => state.elo[b].r - state.elo[a].r).indexOf(id) + 1;
+    body.querySelector('.card-rating').textContent = t('card_rating', {i: place, r: Math.round(e.r), w: e.w, l: e.l, d: e.d});
+  } else body.querySelector('.card-rating').textContent = t('card_unrated');
+  body.querySelector('.card-move-lbl').textContent = t('card_move');
+  const here = state.pool.includes(id) ? 'pool' : state.tiers.find(x => x.items.includes(id))?.id;
+  const rows = body.querySelector('.card-rows');
+  for (const r of [...state.tiers.map(x => ({key: x.id, name: x.label.split('\n')[0] || '—', color: x.color})), {key: 'pool', name: t('unranked'), color: '#7a7a7a'}]) {
+    const b = document.createElement('button'); b.className = 'sel-tier' + (r.key === here ? ' here' : ''); b.style.background = r.color; b.textContent = r.name;
+    b.onclick = async () => { await apply(); closeDialog(); if (r.key !== here) moveTo([id], r.key); };
+    rows.appendChild(b);
+  }
+  const del = body.querySelector('.card-del'); del.textContent = '🗑 ' + t('sel_del');
+  del.onclick = async () => { closeDialog(); if (await ask(t('c_delete', {n: 1}), t('sel_del'))) deleteImages([id]); };
+  dialog({title: t('card_title'), body, wide: true, onOk: apply});
+}
+const tipOf = im => im.note ? `${im.name}\n${im.note}` : im.name;
+// saves a new name and/or note of an image; an empty name keeps the old one
+async function updateImage(id, {name, note}) {
+  const im = images.get(id); if (!im) return;
+  name = String(name ?? im.name).trim() || im.name;
+  note = String(note ?? im.note ?? '').trim();
+  if (name === im.name && note === (im.note || '')) return;
+  im.name = name; im.note = note;
+  const {url, ...rec} = im;
+  await tx('images', 'readwrite', s => s.put(rec));
+  const e = els.get(id); if (e) { e.title = tipOf(im); e.querySelector('.cap').textContent = name; }
+  if (view === 'res') renderResults();
+  if (view === 'cmp') showPair();
+}
+document.addEventListener('contextmenu', e => {
+  const it = e.target.closest?.('#view-tier .item, #view-res .gitem'); if (!it) return;
+  e.preventDefault();
+  if (!TOUCH || it.classList.contains('gitem')) openCard(it.dataset.id);  // on phones a long press on a tile is a drag
+});
+$('#grid').addEventListener('click', e => { const g = e.target.closest('.gitem'); if (g) openCard(g.dataset.id); });
+$('#selCard').onclick = () => { const ids = selected(); if (ids.length === 1) openCard(ids[0]); };
+
+// Ctrl+V: pasted pictures (screenshots, images copied in a browser) are added like dropped files
+document.addEventListener('paste', e => {
+  if (!state || e.target.matches?.('input, textarea')) return;
+  const d = new Date(), p2 = n => String(n).padStart(2, '0');
+  const stamp = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}${p2(d.getSeconds())}`;
+  const files = [...(e.clipboardData?.files || [])].filter(isImageFile)
+    .map((f, i) => new File([f], `paste-${stamp}${i ? '-' + i : ''}.${(f.type.split('/')[1] || 'png').replace('jpeg', 'jpg')}`, {type: f.type}));
+  if (!files.length) return;
+  e.preventDefault();
+  if (view === 'wheel' || view === 'case') addSpinFiles(files, view); else addFiles(files);
+});
+
+function showHelp() {
+  const body = document.createElement('div'); body.className = 'help';
+  const sec = (title, html) => { const h = document.createElement('h4'); h.textContent = title; const p = document.createElement('p'); p.innerHTML = html; body.append(h, p); };
+  sec(t('tab_tier'), (TOUCH ? t('hint_touch') : t('hint')) + '<br>' + t('undo_tip') + ' · ' + t('redo_tip') + '<br>' + t('help_more'));
+  sec(t('reveal_btn'), t('reveal_tip'));
+  sec(t('tab_cmp'), t('keys'));
+  sec(t('tab_tour'), t('tour_keys'));
+  sec(t('tab_wheel'), t('sp_keys_wheel'));
+  sec(t('tab_case'), t('sp_keys_case'));
+  dialog({title: t('help_title'), body, ok: null, cancel: t('close'), wide: true});
+}
+$('#helpBtn').onclick = showHelp;
 
 /* ================= views & keys ================= */
 function setView(v) {
@@ -920,7 +1209,8 @@ function setView(v) {
   document.querySelectorAll('.view').forEach(s => s.classList.toggle('active', s.id === 'view-' + v));
   document.querySelectorAll('.tier-only').forEach(x => x.style.display = v === 'tier' ? '' : 'none');
   const spinView = v === 'wheel' || v === 'case';
-  document.querySelectorAll('.grid-opt').forEach(x => x.style.display = spinView ? 'none' : '');
+  document.querySelectorAll('.grid-opt').forEach(x => x.style.display = spinView || v === 'tour' ? 'none' : '');
+  if (v === 'tour') tourShow();
   updateSelBar();
   if (v === 'cmp') { renderScope(); showPair(); }
   if (v === 'res') renderResults();
@@ -943,12 +1233,22 @@ document.addEventListener('keydown', e => {
   if ($('#tierModal').classList.contains('open')) { if (e.key === 'Escape') closeModal(); return; }
   if (spinKey(e)) return;
   if (e.target.matches('input, textarea, select')) return;
+  if (e.key === '?' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); showHelp(); return; }
   if (view === 'tier' && (e.ctrlKey || e.metaKey) && !e.altKey) {
     if (e.code === 'KeyZ') { e.preventDefault(); e.shiftKey ? redoTier() : undoTier(); }
+    else if (e.code === 'KeyA') { e.preventDefault(); state.pool.filter(id => el(id).style.display !== 'none').forEach(id => setSel(id, true)); }
     else if (e.code === 'KeyY') { e.preventDefault(); redoTier(); }
     return;
   }
   if (e.ctrlKey || e.altKey || e.metaKey) return;
+  if (view === 'tier' && reveal) {
+    const c = e.code;
+    if (c === 'Space' || c === 'ArrowRight' || c === 'Enter' || c === 'ArrowDown') revealStep(1);
+    else if (c === 'ArrowLeft' || c === 'Backspace' || c === 'ArrowUp') revealStep(-1);
+    else if (e.key === 'Escape') togglePresent(false);
+    else return;
+    e.preventDefault(); return;
+  }
   if (view === 'tier') {
     const targets = () => sel.size ? selected() : hovered ? [hovered] : [];
     const n = digitOf(e);
@@ -960,8 +1260,10 @@ document.addEventListener('keydown', e => {
       document.body.classList.contains('present') ? togglePresent(false) : clearSel();
     } else if (e.key === 'Delete') {
       const ids = targets();
-      if (ids.length && confirm(t('c_delete', {n: ids.length}))) deleteImages(ids);
+      if (ids.length) ask(t('c_delete', {n: ids.length}), t('sel_del')).then(ok => ok && deleteImages(ids));
     }
+  } else if (view === 'tour') {
+    tourKey(e);
   } else if (view === 'cmp') {
     const c = e.code;
     if (c === 'ArrowLeft' || c === 'Digit1' || c === 'Numpad1') vote(0);
@@ -977,6 +1279,7 @@ addEventListener('pagehide', () => { if (state) saveNow(); });
 
 /* ================= init ================= */
 spinSetup();
+tourSetup();
 setLang(detectLang());
 (async () => {
   try { db = await openDB(); }
@@ -987,12 +1290,12 @@ setLang(detectLang());
   project = meta.current;
   const recs = (await tx('images', 'readonly', s => s.getAll())).filter(r => projOf(r) === project);
   recs.forEach(r => images.set(r.id, {...r, url: URL.createObjectURL(r.blob)}));
-  state = await tx('kv', 'readonly', s => s.get(stateKey(project))) || defaultState();
+  state = await tx('kv', 'readonly', s => s.get(stateKey(project))) || defaultState(meta.projects.find(p => p.id === project)?.tpl);
   state.settings = {...DEFAULT_SETTINGS, ...state.settings};
   for (const k of ['elo', 'scope']) state[k] ||= {};
   state.history ||= [];
   reconcile();
   await spinLoad();
-  renderProjects(); updateUndoBtns();
+  renderProjects(); updateUndoBtns(); remindBackup();
   applySettings(); renderAll(); setView(state.view || 'tier');
 })();
