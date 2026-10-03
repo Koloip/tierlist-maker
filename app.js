@@ -10,10 +10,23 @@ const DOWN = '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke
 
 const $ = s => document.querySelector(s);
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
+// the look is a personal choice for the whole app, so it lives in localStorage like the language
+const THEME_KEY = 'tierlist.theme', THEMES = ['dark', 'light', 'pixel', 'neon'];
+function setTheme(name) {
+  if (!THEMES.includes(name)) name = 'dark';
+  document.documentElement.dataset.theme = name;
+  try { localStorage.setItem(THEME_KEY, name); } catch {}
+  document.querySelector('#theme').value = name;
+  document.querySelector('meta[name=theme-color]')?.setAttribute('content', getComputedStyle(document.documentElement).getPropertyValue('--panel').trim() || '#252525');
+  if (state) applySettings();
+  if (typeof drawWheel === 'function' && state?.spin) drawWheel();
+}
 const TOUCH = matchMedia('(hover: none)').matches;  // phones and tablets: no hover, no physical keyboard
 if (TOUCH) document.documentElement.classList.add('touch');
 
 let db, state, meta, project = 'default', view = 'tier', hovered = null, lastClicked = null, mx = 0, my = 0, dragIds = null, editTier = null, pair = null;
+document.querySelector('#theme').onchange = e => setTheme(e.target.value);
+setTheme((() => { try { return localStorage.getItem(THEME_KEY); } catch { return null; } })());
 const images = new Map();   // id -> {id, project, name, key, blob, url}
 const els = new Map();      // id -> .item element
 const sel = new Set();
@@ -95,7 +108,7 @@ function saveNow() {
   clearTimeout(saveTimer);
   return tx('kv', 'readwrite', s => s.put(state, stateKey(project))).catch(e => toast(t('t_save_fail', {e})));
 }
-function save() { clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 250); }
+function save() { clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 250); scheduleFolder(); }
 const saveMeta = () => tx('kv', 'readwrite', s => s.put(meta, 'meta'));
 
 // row presets for a new list; their labels need no translation
@@ -198,10 +211,19 @@ function askName(title, value, onOk) {
 const menu = $('#menu');
 $('#menuBtn').onclick = e => { e.stopPropagation(); menu.hidden = !menu.hidden; };
 document.addEventListener('click', e => { if (!menu.hidden && !e.target.closest('#menu')) menu.hidden = true; });
+// the View panel sits in the scrollable header, so it is positioned on the page to avoid being clipped
+$('#viewBtn').onclick = e => {
+  e.stopPropagation();
+  const m = $('#viewMenu'); m.hidden = !m.hidden; if (m.hidden) return;
+  const r = e.currentTarget.getBoundingClientRect();
+  m.style.position = 'fixed'; m.style.top = r.bottom + 6 + 'px';
+  m.style.left = Math.max(8, Math.min(r.left, innerWidth - m.offsetWidth - 8)) + 'px';
+};
+document.addEventListener('click', e => { if (!$('#viewMenu').hidden && !e.target.closest('#viewMenu')) $('#viewMenu').hidden = true; });
 menu.onclick = e => {
   const act = e.target.closest('[data-act]')?.dataset.act; if (!act) return;
   menu.hidden = true;
-  ({newProj, renameProj, deleteProj, exportProj, importProj: () => $('#fImport').click(), install: installApp})[act]?.();
+  ({newProj, renameProj, deleteProj, exportProj, importProj: () => $('#fImport').click(), install: installApp, help: showHelp, storage: openStorage})[act]?.();
 };
 
 /* ================= lists (projects) ================= */
@@ -249,7 +271,7 @@ async function deleteProj() {
     const ids = (await tx(store, 'readonly', s => s.getAll())).filter(r => projOf(r) === project).map(r => r.id);
     await tx(store, 'readwrite', s => ids.forEach(id => s.delete(id)));
   }
-  await tx('kv', 'readwrite', s => s.delete(stateKey(project)));
+  await tx('kv', 'readwrite', s => { s.delete(stateKey(project)); s.delete(dirKey(project)); });
   meta.projects = meta.projects.filter(x => x.id !== project);
   meta.current = meta.projects[0].id; await saveMeta();
   state = null;  // nothing must be saved for the deleted list
@@ -287,9 +309,14 @@ async function importProj(file) {
   try { data = JSON.parse(await file.text()); } catch { data = null; }
   if (!data || data.format !== FILE_FORMAT || !data.state || !Array.isArray(data.images)) { toast(t('t_bad_file'), 4000); return; }
   toast(t('t_importing'), 60000);
+  const withBlobs = list => (list || []).map(r => ({...r, blob: b64ToBlob(r.data, r.type)}));
+  await finishImport(data, withBlobs(data.images), withBlobs(data.spin), file.name.replace(/\.tierlist\.json$|\.json$/i, ''));
+}
+// shared by files and folders: stores the pictures and the state as a new list and switches to it
+async function finishImport(data, imgsIn, spinsIn, fallbackName, folder = null) {
   const id = uid(), map = new Map(), re = x => map.get(x) ?? x;
-  const recs = store => (data[store] || []).map(r => { const nid = uid(); map.set(r.id, nid); return {id: nid, project: id, name: r.name, note: r.note || '', key: r.key, blob: b64ToBlob(r.data, r.type)}; });
-  const imgs = recs('images'), spins = recs('spin');
+  const recs = list => list.map(r => { const nid = uid(); map.set(r.id, nid); return {id: nid, project: id, name: r.name, note: r.note || '', key: r.key, blob: r.blob}; });
+  const imgs = recs(imgsIn), spins = recs(spinsIn);
   const s = data.state;
   s.tiers = (s.tiers || []).map(x => ({...x, items: (x.items || []).map(re)}));
   s.pool = (s.pool || []).map(re);
@@ -306,10 +333,12 @@ async function importProj(file) {
   await tx('images', 'readwrite', st => imgs.forEach(r => st.put(r)));
   await tx('spin', 'readwrite', st => spins.forEach(r => st.put(r)));
   await tx('kv', 'readwrite', st => st.put(s, stateKey(id)));
-  const base = String(data.name || file.name.replace(/\.tierlist\.json$|\.json$/i, '')).slice(0, 80), taken = new Set(meta.projects.map(projName));
+  const base = String(data.name || fallbackName).slice(0, 80), taken = new Set(meta.projects.map(projName));
   let name = base;
   for (let k = 2; taken.has(name); k++) name = `${base} (${k})`;
-  meta.projects.push({id, name});
+  const p = {id, name};
+  meta.projects.push(p);
+  if (folder) { await tx('kv', 'readwrite', st => st.put(folder, dirKey(id))); p.dir = folder.name; }
   toast(t('t_imported'));
   await switchProject(id);
 }
@@ -323,15 +352,17 @@ async function installApp() { if (!installPrompt) return; installPrompt.prompt()
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
 
 /* ================= settings ================= */
+const tierBg = () => getComputedStyle(document.documentElement).getPropertyValue('--tier-bg').trim() || DEFAULT_SETTINGS.bg;
 function applySettings() {
   const s = state.settings, r = document.documentElement.style;
   r.setProperty('--h', s.size + 'px');
   r.setProperty('--w', cellW() + 'px');
-  r.setProperty('--tier-bg', s.bg);
+  // an untouched background follows the theme; a color picked by hand wins over it
+  if (s.bg.toLowerCase() === DEFAULT_SETTINGS.bg) r.removeProperty('--tier-bg'); else r.setProperty('--tier-bg', s.bg);
   r.setProperty('--pool-h', s.poolH + 'vh');
   document.body.classList.toggle('captions', s.captions);
   $('#size').value = s.size; $('#aspect').value = s.aspect; $('#captions').checked = s.captions; $('#zoomOpt').checked = s.zoom;
-  $('#bg').value = s.bg; $('#showUnrated').checked = s.showUnrated;
+  $('#bg').value = tierBg(); $('#showUnrated').checked = s.showUnrated;
   $('#bgReset').hidden = s.bg.toLowerCase() === DEFAULT_SETTINGS.bg;
 }
 $('#size').oninput = e => { state.settings.size = +e.target.value; applySettings(); save(); };
@@ -653,7 +684,7 @@ async function addFiles(files, key = 'pool') {
   toast(t('t_loading', {n: recs.length}), 10000);
   // store as plain Blob so it no longer depends on the original file on disk
   for (const r of recs) r.blob = new Blob([await r.blob.arrayBuffer()], {type: r.blob.type || 'image/jpeg'});
-  await tx('images', 'readwrite', s => { recs.forEach(r => s.put(r)); });
+  if (keepBlobs()) await tx('images', 'readwrite', s => { recs.forEach(r => s.put(r)); });
   recs.forEach(r => images.set(r.id, {...r, url: URL.createObjectURL(r.blob)}));
   listOf(key).push(...recs.map(r => r.id));
   renderAll(); save();
@@ -850,7 +881,7 @@ async function renderTierCanvas({head, caps, pool}) {
   rows.forEach((row, i) => {
     const h = heights[i];
     ctx.fillStyle = row.color; ctx.fillRect(0, y, labelW, h);
-    ctx.fillStyle = state.settings.bg; ctx.fillRect(labelW, y, cols * cw, h);
+    ctx.fillStyle = tierBg(); ctx.fillRect(labelW, y, cols * cw, h);
     ctx.fillStyle = '#111'; ctx.font = `${fs}px system-ui, "Segoe UI", sans-serif`;
     const lines = wrapText(ctx, row.label, labelW - 12), lh = fs * 1.2;
     lines.forEach((ln, k) => ctx.fillText(ln, labelW / 2, y + h / 2 + (k - (lines.length - 1) / 2) * lh));
@@ -879,7 +910,7 @@ $('#pngBtn').onclick = () => {
     body.appendChild(l);
   }
   const opts = () => ({head: s.pngHead, caps: s.pngCaps, pool: s.pngPool});
-  const copy = document.createElement('button'); copy.className = 'btn'; copy.textContent = '📋 ' + t('png_copy');
+  const copy = document.createElement('button'); copy.className = 'btn'; copy.textContent = t('png_copy');
   copy.onclick = () => {
     if (!navigator.clipboard?.write || !window.ClipboardItem) { toast(t('t_copy_fail'), 4000); return; }
     toast(t('t_building'), 20000);
@@ -889,7 +920,7 @@ $('#pngBtn').onclick = () => {
       .then(() => { toast(t('t_copied'), 3500); closeDialog(); }).catch(() => toast(t('t_copy_fail'), 4000));
   };
   body.appendChild(copy);
-  dialog({title: t('png_title'), body, ok: '⬇ ' + t('png_dl'), onOk: async () => {
+  dialog({title: t('png_title'), body, ok: t('png_dl'), onOk: async () => {
     toast(t('t_building'), 20000);
     canvasToFile(await renderTierCanvas(opts()), fileSafe(projName(meta.projects.find(p => p.id === project))) + '.png');
   }});
@@ -1151,7 +1182,7 @@ function openCard(id) {
     b.onclick = async () => { await apply(); closeDialog(); if (r.key !== here) moveTo([id], r.key); };
     rows.appendChild(b);
   }
-  const del = body.querySelector('.card-del'); del.textContent = '🗑 ' + t('sel_del');
+  const del = body.querySelector('.card-del'); del.textContent = t('sel_del');
   del.onclick = async () => { closeDialog(); if (await ask(t('c_delete', {n: 1}), t('sel_del'))) deleteImages([id]); };
   dialog({title: t('card_title'), body, wide: true, onOk: apply});
 }
@@ -1164,7 +1195,8 @@ async function updateImage(id, {name, note}) {
   if (name === im.name && note === (im.note || '')) return;
   im.name = name; im.note = note;
   const {url, ...rec} = im;
-  await tx('images', 'readwrite', s => s.put(rec));
+  if (keepBlobs()) await tx('images', 'readwrite', s => s.put(rec));
+  scheduleFolder();
   const e = els.get(id); if (e) { e.title = tipOf(im); e.querySelector('.cap').textContent = name; }
   if (view === 'res') renderResults();
   if (view === 'cmp') showPair();
@@ -1200,7 +1232,6 @@ function showHelp() {
   sec(t('tab_case'), t('sp_keys_case'));
   dialog({title: t('help_title'), body, ok: null, cancel: t('close'), wide: true});
 }
-$('#helpBtn').onclick = showHelp;
 
 /* ================= views & keys ================= */
 function setView(v) {
@@ -1288,8 +1319,13 @@ setLang(detectLang());
   meta = await tx('kv', 'readonly', s => s.get('meta')) || {current: 'default', projects: [{id: 'default', name: ''}]};
   if (!meta.projects.some(p => p.id === meta.current)) meta.current = meta.projects[0].id;
   project = meta.current;
-  const recs = (await tx('images', 'readonly', s => s.getAll())).filter(r => projOf(r) === project);
-  recs.forEach(r => images.set(r.id, {...r, url: URL.createObjectURL(r.blob)}));
+  const cur = meta.projects.find(p => p.id === project);
+  if (cur.dirOnly) { if (!await loadFolderImages(cur)) return; }
+  else {
+    if (cur.dir) dirHandle = await tx('kv', 'readonly', s => s.get(dirKey(project))) || null;
+    const recs = (await tx('images', 'readonly', s => s.getAll())).filter(r => projOf(r) === project);
+    recs.forEach(r => images.set(r.id, {...r, url: URL.createObjectURL(r.blob)}));
+  }
   state = await tx('kv', 'readonly', s => s.get(stateKey(project))) || defaultState(meta.projects.find(p => p.id === project)?.tpl);
   state.settings = {...DEFAULT_SETTINGS, ...state.settings};
   for (const k of ['elo', 'scope']) state[k] ||= {};

@@ -144,7 +144,7 @@ function renderTour() {
   } else if (T.done) {
     const im = tourIm(T.rounds.at(-1)[0].w);
     stage.innerHTML = `<div class="champ"><div class="champ-title"></div><img alt=""><div class="nm"></div><button class="btn primary" id="tourAgain"></button></div>`;
-    stage.querySelector('.champ-title').textContent = '🏆 ' + t('tour_champion');
+    stage.querySelector('.champ-title').textContent = t('tour_champion');
     if (im) stage.querySelector('img').src = im.url;
     stage.querySelector('.nm').textContent = im ? im.name : '—';
     stage.querySelector('#tourAgain').textContent = t('tour_start');

@@ -24,6 +24,20 @@
         <hr>
         <button data-act="exportProj" data-i18n="exp"></button>
         <button data-act="importProj" data-i18n="imp"></button>
+        <button data-act="storage" data-i18n="storage"></button>
+        <hr>
+        <label class="menu-row"><span data-i18n="theme"></span>
+          <select id="theme">
+        <option value="dark" data-i18n="theme_dark"></option>
+        <option value="light" data-i18n="theme_light"></option>
+        <option value="pixel" data-i18n="theme_pixel"></option>
+        <option value="neon" data-i18n="theme_neon"></option>
+      </select>
+        </label>
+        <label class="menu-row"><span data-i18n="lang"></span><select id="lang"></select></label>
+        <hr>
+        <button data-act="help" data-i18n="help_title"></button>
+        <a class="menu-link" id="ghLink" target="_blank" rel="noopener" hidden>GitHub</a>
         <hr id="installSep">
         <button data-act="install" id="installItem" data-i18n="install" hidden></button>
       </div>
@@ -40,36 +54,31 @@
     <button class="tab" data-view="case" data-i18n="tab_case"></button>
   </div>
   <div class="tools">
-    <label class="grid-opt"><span data-i18n="size"></span> <input type="range" id="size" min="50" max="260" step="5"></label>
-    <label class="grid-opt"><span data-i18n="shape"></span>
-      <select id="aspect">
-        <option value="portrait" data-i18n="shape_portrait"></option>
-        <option value="square" data-i18n="shape_square"></option>
-        <option value="wide" data-i18n="shape_wide"></option>
-      </select>
-    </label>
-    <label class="grid-opt"><input type="checkbox" id="captions"> <span data-i18n="captions"></span></label>
-    <label class="grid-opt" data-i18n-title="zoom_tip"><input type="checkbox" id="zoomOpt"> <span data-i18n="zoom_opt"></span></label>
+    <div class="menu-wrap grid-opt">
+      <button class="btn" id="viewBtn"><span data-i18n="view_btn"></span> ▾</button>
+      <div class="menu view-menu" id="viewMenu" hidden>
+        <div class="menu-row tier-only"><span data-i18n="bg"></span><span class="bg-pick"><button class="btn icon-btn" id="bgReset" data-i18n-title="bg_reset" hidden>↺</button><input type="color" id="bg"></span></div>
+        <label class="menu-row"><span data-i18n="size"></span> <input type="range" id="size" min="50" max="260" step="5"></label>
+        <label class="menu-row"><span data-i18n="shape"></span>
+          <select id="aspect">
+            <option value="portrait" data-i18n="shape_portrait"></option>
+            <option value="square" data-i18n="shape_square"></option>
+            <option value="wide" data-i18n="shape_wide"></option>
+          </select>
+        </label>
+        <label class="menu-row"><input type="checkbox" id="captions"> <span data-i18n="captions"></span></label>
+        <label class="menu-row" data-i18n-title="zoom_tip"><input type="checkbox" id="zoomOpt"> <span data-i18n="zoom_opt"></span></label>
+      </div>
+    </div>
     <span class="spacer"></span>
     <span class="tier-only undo-btns">
       <button class="btn icon-btn" id="undoTier" data-i18n-title="undo_tip">↶</button>
       <button class="btn icon-btn" id="redoTier" data-i18n-title="redo_tip">↷</button>
     </span>
-    <label class="tier-only"><span data-i18n="bg"></span> <input type="color" id="bg"></label>
-    <button class="btn icon-btn tier-only" id="bgReset" data-i18n-title="bg_reset" hidden>↺</button>
     <button class="btn tier-only" id="presentBtn" data-i18n="present"></button>
     <button class="btn tier-only" id="revealBtn" data-i18n="reveal_btn" data-i18n-title="reveal_tip"></button>
-    <button class="btn tier-only danger" id="resetBtn" data-i18n="reset"></button>
     <button class="btn primary tier-only" id="pngBtn" data-i18n="png"></button>
-    <button class="btn icon-btn" id="helpBtn" data-i18n-title="help_tip">?</button>
-    <label class="lang-pick" data-i18n-title="lang">
-      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg>
-      <select id="lang"></select>
-    </label>
-    <a class="gh" id="ghLink" target="_blank" rel="noopener" hidden title="GitHub">
-      <svg viewBox="0 0 16 16" width="22" height="22" fill="#fff"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
-    </a>
-  </div>
+ </div>
 </header>
 
 <!-- ============ TIER LIST ============ -->
@@ -94,6 +103,7 @@
       <span class="spacer"></span>
       <button class="btn primary" id="addFilesBtn" data-i18n="add_files"></button>
       <button class="btn primary" id="addDirBtn" data-i18n="add_folder"></button>
+      <button class="btn" id="resetBtn" data-i18n="reset"></button>
       <button class="btn danger" id="wipeBtn" data-i18n="wipe"></button>
       <input type="file" id="fFiles" multiple accept="image/*" hidden>
       <input type="file" id="fDir" webkitdirectory multiple hidden>
@@ -219,7 +229,7 @@
   <div id="selTiers"></div>
   <button class="btn icon-btn" id="selCard" data-i18n-title="card_open">✎</button>
   <button class="btn icon-btn" id="selPool">↩</button>
-  <button class="btn icon-btn danger" id="selDel">🗑</button>
+  <button class="btn danger" id="selDel" data-i18n="sel_del"></button>
   <button class="btn icon-btn" id="selClear">✕</button>
 </div>
 
@@ -264,6 +274,7 @@
 <script src="i18n.js"></script>
 <script src="spin.js"></script>
 <script src="tour.js"></script>
+<script src="folder.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
