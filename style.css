@@ -193,3 +193,74 @@ body.present #exitPresent{display:block}
 .mbtns button:hover{background:#dedede}
 #toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:9px 16px;border-radius:8px;box-shadow:0 4px 18px rgba(0,0,0,.4);z-index:60;opacity:0;pointer-events:none;transition:opacity .2s}
 #toast.show{opacity:1}
+
+/* ---------- lists menu, undo, dialogs ---------- */
+.proj{display:flex;align-items:center;gap:6px}
+#project{max-width:200px}
+.icon-btn{padding:5px 10px;font-size:16px;line-height:1.1}
+.icon-btn:disabled{opacity:.35;cursor:default}
+.undo-btns{display:flex;gap:4px}
+.menu-wrap{position:relative}
+.menu{position:absolute;top:calc(100% + 6px);left:0;z-index:45;min-width:230px;background:#2b2b2b;border:1px solid #444;border-radius:8px;padding:6px;box-shadow:0 10px 30px rgba(0,0,0,.5);display:flex;flex-direction:column}
+.menu[hidden]{display:none}
+.menu button{background:none;border:none;color:var(--text);text-align:left;padding:8px 10px;border-radius:5px;cursor:pointer}
+.menu button:hover{background:#3a3a3a}
+.menu hr{border:none;border-top:1px solid #3d3d3d;margin:4px 2px}
+#installSep:has(+ #installItem[hidden]){display:none}
+.dlg{background:#262626;border:1px solid #444;border-radius:10px;padding:20px 22px;width:min(480px,94vw);max-height:90vh;display:flex;flex-direction:column;gap:14px;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.dlg h3{margin:0;font-size:17px}
+#dlgBody{overflow:auto;min-height:0}
+.dlg-btns{display:flex;justify-content:flex-end;gap:8px}
+.dlg-input{width:100%;font-size:16px;padding:8px 10px}
+.dlg-hint{margin:0 0 12px;font-size:13px}
+.pick-list{display:flex;flex-wrap:wrap;gap:8px}
+.auto-rows{display:flex;flex-direction:column;gap:6px}
+.auto-row{display:flex;align-items:center;gap:8px}
+.auto-lbl{min-width:64px;max-width:140px;padding:4px 10px;border-radius:5px;color:#111;font-weight:700;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.auto-row input{width:70px}
+.auto-n{min-width:50px}
+
+/* ---------- selection bar & touch drag ---------- */
+#selBar{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:30;display:flex;align-items:center;gap:8px;padding:8px 10px;
+  background:#2b2b2b;border:1px solid #4a4a4a;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.55);max-width:calc(100vw - 16px)}
+#selBar[hidden]{display:none}
+#selCount{white-space:nowrap;font-weight:600;padding:0 4px}
+#selTiers{display:flex;gap:4px;overflow-x:auto;min-width:0}
+.sel-tier{min-width:38px;height:34px;border:none;border-radius:6px;color:#111;font-weight:700;cursor:pointer;padding:0 8px;white-space:nowrap;flex:none}
+.sel-tier:hover{filter:brightness(1.1)}
+.drag-ghost{position:fixed;left:0;top:0;z-index:70;pointer-events:none;opacity:.85;box-shadow:0 8px 24px rgba(0,0,0,.6);border-radius:4px;overflow:hidden}
+.drag-ghost img{width:100%;height:100%;object-fit:cover;display:block}
+.drag-ghost span{position:absolute;top:4px;right:4px;background:#4da3ff;color:#fff;font-weight:700;font-size:12px;border-radius:10px;padding:1px 7px}
+.item{-webkit-touch-callout:none;touch-action:manipulation}
+.splitter{touch-action:none}
+.touch .keys{display:none}
+
+/* ---------- phones ---------- */
+@media (max-width:700px){
+  :root{--label-w:62px}
+  header{padding:6px 8px;gap:6px}
+  .proj{width:100%}
+  #project{flex:1;max-width:none}
+  .tabs{width:100%;overflow-x:auto;margin:0;flex-wrap:nowrap}
+  .tab{padding:7px 10px;white-space:nowrap}
+  .tools{gap:8px;flex-wrap:nowrap;overflow-x:auto;width:100%;padding-bottom:2px;scrollbar-width:thin}
+  .tools>*{flex:none}
+  .tools .spacer{display:none}
+  .tiers-scroll{padding:6px}
+  .ctrl{width:38px;flex-direction:column;gap:2px}
+  .ctrl svg{width:20px;height:20px}
+  .ctrl .gear svg{width:22px;height:22px}
+  .arrows{gap:0}
+  .label{font-size:clamp(12px,calc(var(--h)*.15),22px)}
+  .pool-head{padding:6px 8px;gap:6px}
+  #search{flex:1;min-width:120px;width:auto!important}
+  .bar{padding:8px 10px;gap:8px}
+  .arena{flex-wrap:wrap;gap:8px;padding:8px;align-content:center}
+  .card{padding:6px;flex:1 1 40%}
+  .card img{height:auto;max-height:42vh;max-width:100%}
+  .card .nm{font-size:14px;max-width:100%}
+  .mid{order:3;flex-direction:row;width:100%;justify-content:center}
+  .vs{display:none}
+  .grid{padding:8px}
+  #selBar{bottom:10px;padding:6px 8px;gap:6px}
+}

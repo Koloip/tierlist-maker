@@ -1,6 +1,7 @@
 'use strict';
 // Wheel of fortune and a CS:GO-style case opening.
-// Their images live in a separate IndexedDB store ('spin'), so they never show up in the tier list pool.
+// Images added here live in a separate IndexedDB store ('spin'), so they never show up in the tier list pool.
+// Items taken from the tier list point at the tier list's own images instead of copying them.
 // This file only declares things: app.js calls spinSetup() on start and spinLoad() once the database is open.
 
 const MODES = ['wheel', 'case'];
@@ -13,10 +14,11 @@ const SPIN_DEFAULTS = {
   wheel: {items: [], dur: 6, sound: true, removeWin: false},
   case: {items: [], dur: 7, sound: true},
 };
-// item: {id, img: spin image id or null for a text option, cap, off, r: rarity index, w: weight}
+// item: {id, img: image id (spin store or tier list) or null for a text option, cap, off, r: rarity index, w: weight}
 // the chance of an item is its weight divided by the sum of weights of all enabled items
 
 const simgs = new Map();   // id -> {id, name, key, blob, url}
+const imOf = id => id ? simgs.get(id) || images.get(id) : null;  // ids are unique across both stores
 const thumbs = new Map();  // id -> {src, side}: downscaled copies for drawing the wheel
 const spinTimers = {};
 let spinning = false, wheelAngle = 0, wheelToken = 0, winShown = null, audioCtx = null, lastTick = 0;
@@ -80,10 +82,13 @@ async function spinLoad() {
   const saved = state.spin || {};
   state.spin = {};
   for (const m of MODES) state.spin[m] = {...JSON.parse(JSON.stringify(SPIN_DEFAULTS[m])), ...saved[m]};
-  const recs = await tx('spin', 'readonly', s => s.getAll());
+  const recs = (await tx('spin', 'readonly', s => s.getAll())).filter(r => (r.project || 'default') === project);
   recs.forEach(r => simgs.set(r.id, {...r, url: URL.createObjectURL(r.blob)}));
+  // older versions copied tier list images here; point those items back at the originals so the copies get freed
+  const tierByKey = new Map([...images.values()].map(im => [im.key, im.id]));
   for (const m of MODES) {
-    cfg(m).items = cfg(m).items.filter(it => !it.img || simgs.has(it.img));
+    cfg(m).items.forEach(it => { const k = simgs.get(it.img)?.key; if (tierByKey.has(k)) it.img = tierByKey.get(k); });
+    cfg(m).items = cfg(m).items.filter(it => !it.img || imOf(it.img));
     cfg(m).items.forEach(it => { if (!(it.w >= 0)) it.w = 1; });
   }
   delete cfg('case').csOdds;  // replaced by the "CS:GO odds" button
@@ -124,22 +129,61 @@ function addSpinFiles(files, m) {
   recs.sort((a, b) => collator.compare(a.name, b.name));
   return addSpinRecords(m, recs);
 }
+// lets the user pick which rows of the tier list to take, then adds references to those images
 function addFromTier(m) {
-  const ids = [...state.tiers.flatMap(x => x.items), ...state.pool];
-  if (!ids.length) { toast(t('t_tier_empty')); return; }
-  addSpinRecords(m, ids.map(id => images.get(id)).map(im => ({name: im.name, key: im.key, blob: im.blob})));
+  if (spinning) return;
+  if (!images.size) { toast(t('t_tier_empty')); return; }
+  const lists = [...state.tiers.map(x => ({key: x.id, name: x.label.split('\n')[0] || '—', color: x.color, ids: x.items})),
+    {key: 'pool', name: t('unranked'), color: '#666', ids: state.pool}].filter(l => l.ids.length);
+  const body = document.createElement('div'); body.className = 'pick-list';
+  for (const l of lists) {
+    const row = document.createElement('label'); row.className = 'chip';
+    row.innerHTML = `<input type="checkbox" checked><span class="dot" style="background:${l.color}"></span><span></span><span class="muted">${l.ids.length}</span>`;
+    row.querySelector('span:nth-of-type(2)').textContent = l.name;
+    row.querySelector('input').dataset.key = l.key;
+    body.appendChild(row);
+  }
+  dialog({title: t('pick_title'), body, ok: t('pick_add'), onOk: () => {
+    const keys = new Set([...body.querySelectorAll('input:checked')].map(x => x.dataset.key));
+    addTierRefs(m, lists.filter(l => keys.has(l.key)).flatMap(l => l.ids));
+  }});
+}
+function addTierRefs(m, ids) {
+  const c = cfg(m), have = new Set(c.items.map(it => imOf(it.img)?.key).filter(Boolean)), w = newWeight(m), added = [];
+  for (const id of ids) {
+    const im = images.get(id);
+    if (!im || have.has(im.key)) continue;
+    have.add(im.key);
+    added.push({id: uid(), img: id, cap: '', off: false, r: 0, w});
+  }
+  if (!added.length) { toast(t('t_no_new')); return; }
+  c.items.push(...added);
+  save(); itemsChanged(m, true);
+  toast(t('t_added', {n: added.length}));
+}
+// tier list images were deleted: drop the items that pointed at them
+function spinForget(ids) {
+  if (!state?.spin) return;
+  const s = new Set(ids);
+  for (const m of MODES) {
+    const before = cfg(m).items.length;
+    cfg(m).items = cfg(m).items.filter(it => !s.has(it.img));
+    if (cfg(m).items.length !== before) itemsChanged(m, true);
+  }
+  ids.forEach(id => thumbs.delete(id));
 }
 async function addSpinRecords(m, recs) {
   if (spinning) return;
   const c = cfg(m);
-  const have = new Set(c.items.filter(it => it.img).map(it => simgs.get(it.img)?.key));
-  const byKey = new Map([...simgs.values()].map(s => [s.key, s.id]));  // the same picture is stored once for both modes
+  const have = new Set(c.items.map(it => imOf(it.img)?.key).filter(Boolean));
+  // the same picture is stored once: both modes share it, and a picture already in the tier list is reused
+  const byKey = new Map([...simgs.values(), ...images.values()].map(s => [s.key, s.id]));
   const fresh = [], added = [], w = newWeight(m);
   for (const r of recs) {
     if (have.has(r.key)) continue;
     have.add(r.key);
     let id = byKey.get(r.key);
-    if (!id) { id = uid(); fresh.push({id, name: r.name, key: r.key, blob: r.blob}); byKey.set(r.key, id); }
+    if (!id) { id = uid(); fresh.push({id, project, name: r.name, key: r.key, blob: r.blob}); byKey.set(r.key, id); }
     added.push({id: uid(), img: id, cap: '', off: false, r: 0, w});
   }
   if (!added.length) { toast(t('t_no_new')); return; }
@@ -165,7 +209,7 @@ function renderSpinList(m) {
   if (!items.length) { list.innerHTML = `<div class="empty">${t('sp_empty')}</div>`; updateCount(m); return; }
   const frag = document.createDocumentFragment();
   for (const it of items) {
-    const im = it.img && simgs.get(it.img);
+    const im = imOf(it.img);
     const row = document.createElement('div');
     row.className = 'srow' + (it.off ? ' off' : ''); row.dataset.id = it.id;
     row.innerHTML = `<input type="checkbox" class="son"${it.off ? '' : ' checked'}>
@@ -308,7 +352,7 @@ function layoutWheel() {
 }
 const thumbSide = n => Math.round(Math.min(1024, Math.max(160, 2400 / Math.sqrt(Math.max(1, n)))));
 async function makeThumb(id, side) {
-  const im = simgs.get(id); if (!im) return;
+  const im = imOf(id); if (!im) return;
   try {
     const bm = await createImageBitmap(im.blob);
     const k = Math.min(1, side / Math.max(bm.width, bm.height));
@@ -429,7 +473,7 @@ function spinWheel() {
 
 /* ================= case ================= */
 function caseCard(it) {
-  const d = document.createElement('div'), im = it.img && simgs.get(it.img);
+  const d = document.createElement('div'), im = imOf(it.img);
   d.className = 'ccard'; d.style.setProperty('--rc', RARITIES[it.r || 0].c);
   if (im) {
     const img = new Image(); img.src = im.url; img.alt = ''; img.draggable = false; img.decoding = 'async'; d.appendChild(img);
@@ -481,7 +525,7 @@ function openCase() {
 /* ================= result ================= */
 function showWin(m, it) {
   winShown = {m, it};
-  const body = $('#winBody'), im = it.img && simgs.get(it.img);
+  const body = $('#winBody'), im = imOf(it.img);
   body.innerHTML = '';
   $('#winCard').style.setProperty('--rc', m === 'case' ? RARITIES[it.r || 0].c : '#f5c518');
   if (m === 'case') {

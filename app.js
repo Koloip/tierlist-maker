@@ -10,9 +10,11 @@ const DOWN = '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke
 
 const $ = s => document.querySelector(s);
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
+const TOUCH = matchMedia('(hover: none)').matches;  // phones and tablets: no hover, no physical keyboard
+if (TOUCH) document.documentElement.classList.add('touch');
 
-let db, state, view = 'tier', hovered = null, lastClicked = null, mx = 0, my = 0, dragIds = null, editTier = null, pair = null;
-const images = new Map();   // id -> {id, name, key, blob, url}
+let db, state, meta, project = 'default', view = 'tier', hovered = null, lastClicked = null, mx = 0, my = 0, dragIds = null, editTier = null, pair = null;
+const images = new Map();   // id -> {id, project, name, key, blob, url}
 const els = new Map();      // id -> .item element
 const sel = new Set();
 const recent = [];
@@ -43,6 +45,7 @@ function applyI18n() {
   document.querySelectorAll('[data-i18n-html]').forEach(e => e.innerHTML = t(e.dataset.i18nHtml));
   document.querySelectorAll('[data-i18n-title]').forEach(e => e.title = t(e.dataset.i18nTitle));
   document.querySelectorAll('[data-i18n-ph]').forEach(e => e.placeholder = t(e.dataset.i18nPh));
+  if (TOUCH) $('.hint').textContent = t('hint_touch');
 }
 function setLang(l) {
   lang = I18N[l] ? l : 'en';
@@ -51,7 +54,7 @@ function setLang(l) {
   $('#lang').value = lang;
   applyI18n();
   if (!state) return;
-  renderAll();
+  renderProjects(); renderAll(); updateSelBar();
   if (view === 'cmp') { renderScope(); updateStats(); }
   if (view === 'res') renderResults();
   spinLang();
@@ -61,6 +64,8 @@ $('#lang').onchange = e => setLang(e.target.value);
 if (REPO_URL) { $('#ghLink').href = REPO_URL; $('#ghLink').hidden = false; }
 
 /* ================= storage ================= */
+// Every list ("project") has its own state in kv; images carry the id of the list they belong to.
+// The first list is 'default' and keeps the original key 'state', so data from older versions just works.
 function openDB() {
   return new Promise((res, rej) => {
     const r = indexedDB.open('tierlist-maker', 2);
@@ -83,11 +88,15 @@ function tx(store, mode, fn) {
     tr.onabort = () => rej(tr.error);
   });
 }
+const stateKey = p => p === 'default' ? 'state' : 'state:' + p;
+const projOf = r => r.project || 'default';
 let saveTimer;
-function save() {
+function saveNow() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => tx('kv', 'readwrite', s => s.put(state, 'state')).catch(e => toast(t('t_save_fail', {e}))), 250);
+  return tx('kv', 'readwrite', s => s.put(state, stateKey(project))).catch(e => toast(t('t_save_fail', {e})));
 }
+function save() { clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 250); }
+const saveMeta = () => tx('kv', 'readwrite', s => s.put(meta, 'meta'));
 
 function defaultState() {
   return {
@@ -113,10 +122,18 @@ function removeEverywhere(ids) {
   state.pool = state.pool.filter(x => !s.has(x));
   state.tiers.forEach(x => x.items = x.items.filter(y => !s.has(y)));
 }
+// keep the lists consistent with the stored images: drop unknown ids and duplicates, put missing images into the pool
+function reconcile() {
+  const seen = new Set(), keep = id => images.has(id) && !seen.has(id) && seen.add(id);
+  state.tiers.forEach(x => x.items = x.items.filter(keep));
+  state.pool = state.pool.filter(keep);
+  const missing = [...images.keys()].filter(id => !seen.has(id)).sort((a, b) => collator.compare(images.get(a).name, images.get(b).name));
+  state.pool.push(...missing);
+}
 function makeEl(id) {
   const im = images.get(id);
   const d = document.createElement('div');
-  d.className = 'item'; d.draggable = true; d.dataset.id = id; d.title = im.name;
+  d.className = 'item'; d.draggable = !TOUCH; d.dataset.id = id; d.title = im.name;
   const img = new Image(); img.src = im.url; img.alt = ''; img.draggable = false; img.decoding = 'async';
   const cap = document.createElement('div'); cap.className = 'cap'; cap.textContent = im.name;
   d.append(img, cap);
@@ -129,6 +146,137 @@ function download(blob, name) {
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 10000);
 }
+const fileSafe = s => (s || 'tierlist').replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 80) || 'tierlist';
+
+/* ================= dialogs & menu ================= */
+let dlgOk = null;
+// body: element or HTML string; onOk may return false to keep the dialog open
+function dialog({title, body, ok = t('ok'), onOk}) {
+  $('#dlgTitle').textContent = title;
+  const b = $('#dlgBody'); b.replaceChildren();
+  if (typeof body === 'string') b.innerHTML = body; else if (body) b.appendChild(body);
+  $('#dlgOk').textContent = ok; $('#dlgCancel').textContent = t('cancel');
+  dlgOk = onOk;
+  $('#dlg').classList.add('open');
+  setTimeout(() => (b.querySelector('input[type=text]') || $('#dlgOk')).focus(), 0);
+}
+function closeDialog() { $('#dlg').classList.remove('open'); dlgOk = null; }
+async function confirmDialog() { const fn = dlgOk; if (fn && (await fn()) === false) return; closeDialog(); }
+$('#dlgOk').onclick = confirmDialog;
+$('#dlgCancel').onclick = closeDialog;
+$('#dlg').onmousedown = e => { if (e.target === $('#dlg')) closeDialog(); };
+function askName(title, value, onOk) {
+  const inp = document.createElement('input'); inp.type = 'text'; inp.value = value; inp.className = 'dlg-input'; inp.maxLength = 80;
+  dialog({title, body: inp, onOk: () => { const v = inp.value.trim(); if (!v) return false; return onOk(v); }});
+  setTimeout(() => inp.select(), 0);
+}
+
+const menu = $('#menu');
+$('#menuBtn').onclick = e => { e.stopPropagation(); menu.hidden = !menu.hidden; };
+document.addEventListener('click', e => { if (!menu.hidden && !e.target.closest('#menu')) menu.hidden = true; });
+menu.onclick = e => {
+  const act = e.target.closest('[data-act]')?.dataset.act; if (!act) return;
+  menu.hidden = true;
+  ({newProj, renameProj, deleteProj, exportProj, importProj: () => $('#fImport').click(), install: installApp})[act]?.();
+};
+
+/* ================= lists (projects) ================= */
+const projName = p => p.name || t('proj_default');
+function renderProjects() {
+  $('#project').innerHTML = '';
+  for (const p of meta.projects) {
+    const o = document.createElement('option'); o.value = p.id; o.textContent = projName(p); $('#project').appendChild(o);
+  }
+  $('#project').value = project;
+}
+$('#project').onchange = e => switchProject(e.target.value);
+async function switchProject(id) {
+  await saveNow();
+  meta.current = id; await saveMeta();
+  location.reload();
+}
+function newProj() {
+  askName(t('proj_new').replace(/^\+\s*|…$/g, ''), '', async name => {
+    const id = uid(); meta.projects.push({id, name}); await switchProject(id);
+  });
+}
+function renameProj() {
+  const p = meta.projects.find(x => x.id === project);
+  askName(t('proj_name'), projName(p), async name => { p.name = name; await saveMeta(); renderProjects(); });
+}
+async function deleteProj() {
+  if (meta.projects.length < 2) { toast(t('t_proj_last')); return; }
+  const p = meta.projects.find(x => x.id === project);
+  if (!confirm(t('c_proj_delete', {name: projName(p)}))) return;
+  clearTimeout(saveTimer);
+  for (const store of ['images', 'spin']) {
+    const ids = (await tx(store, 'readonly', s => s.getAll())).filter(r => projOf(r) === project).map(r => r.id);
+    await tx(store, 'readwrite', s => ids.forEach(id => s.delete(id)));
+  }
+  await tx('kv', 'readwrite', s => s.delete(stateKey(project)));
+  meta.projects = meta.projects.filter(x => x.id !== project);
+  meta.current = meta.projects[0].id; await saveMeta();
+  state = null;  // nothing must be saved for the deleted list
+  location.reload();
+}
+
+/* ================= save to / open from file ================= */
+// The file is JSON with the list's state and all its images as base64, so it can be moved to another browser or shared.
+const FILE_FORMAT = 'tierlist-maker';
+function blobToB64(blob) {
+  return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = () => rej(r.error); r.readAsDataURL(blob); });
+}
+function b64ToBlob(b64, type) {
+  const bin = atob(b64), u8 = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  return new Blob([u8], {type: type || 'image/jpeg'});
+}
+async function exportProj() {
+  toast(t('t_exporting'), 60000);
+  await saveNow();
+  const pack = async map => {
+    const out = [];
+    for (const im of map.values()) out.push({id: im.id, name: im.name, key: im.key, type: im.blob.type, data: await blobToB64(im.blob)});
+    return out;
+  };
+  const p = meta.projects.find(x => x.id === project);
+  const data = {format: FILE_FORMAT, version: 1, name: projName(p), state, images: await pack(images), spin: await pack(simgs)};
+  download(new Blob([JSON.stringify(data)], {type: 'application/json'}), fileSafe(projName(p)) + '.tierlist.json');
+  toast(t('t_exported'));
+}
+// opens the file as a new list; all ids are renewed so it never collides with lists already in this browser
+async function importProj(file) {
+  let data;
+  try { data = JSON.parse(await file.text()); } catch { data = null; }
+  if (!data || data.format !== FILE_FORMAT || !data.state || !Array.isArray(data.images)) { toast(t('t_bad_file'), 4000); return; }
+  toast(t('t_importing'), 60000);
+  const id = uid(), map = new Map(), re = x => map.get(x) ?? x;
+  const recs = store => (data[store] || []).map(r => { const nid = uid(); map.set(r.id, nid); return {id: nid, project: id, name: r.name, key: r.key, blob: b64ToBlob(r.data, r.type)}; });
+  const imgs = recs('images'), spins = recs('spin');
+  const s = data.state;
+  s.tiers = (s.tiers || []).map(x => ({...x, items: (x.items || []).map(re)}));
+  s.pool = (s.pool || []).map(re);
+  s.elo = Object.fromEntries(Object.entries(s.elo || {}).map(([k, v]) => [re(k), v]));
+  s.history = (s.history || []).map(h => ({...h, a: re(h.a), b: re(h.b)}));
+  if (s.spin) for (const m of Object.values(s.spin)) (m.items || []).forEach(it => { if (it.img) it.img = re(it.img); });
+  await tx('images', 'readwrite', st => imgs.forEach(r => st.put(r)));
+  await tx('spin', 'readwrite', st => spins.forEach(r => st.put(r)));
+  await tx('kv', 'readwrite', st => st.put(s, stateKey(id)));
+  const base = String(data.name || file.name.replace(/\.tierlist\.json$|\.json$/i, '')).slice(0, 80), taken = new Set(meta.projects.map(projName));
+  let name = base;
+  for (let k = 2; taken.has(name); k++) name = `${base} (${k})`;
+  meta.projects.push({id, name});
+  toast(t('t_imported'));
+  await switchProject(id);
+}
+$('#fImport').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (f) importProj(f); };
+
+/* ================= install as an app (PWA) ================= */
+let installPrompt = null;
+addEventListener('beforeinstallprompt', e => { e.preventDefault(); installPrompt = e; $('#installItem').hidden = false; });
+addEventListener('appinstalled', () => { installPrompt = null; $('#installItem').hidden = true; });
+async function installApp() { if (!installPrompt) return; installPrompt.prompt(); await installPrompt.userChoice.catch(() => {}); installPrompt = null; $('#installItem').hidden = true; }
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
 
 /* ================= settings ================= */
 function applySettings() {
@@ -145,6 +293,24 @@ $('#size').oninput = e => { state.settings.size = +e.target.value; applySettings
 $('#aspect').onchange = e => { state.settings.aspect = e.target.value; applySettings(); save(); };
 $('#captions').onchange = e => { state.settings.captions = e.target.checked; applySettings(); save(); };
 $('#bg').oninput = e => { state.settings.bg = e.target.value; applySettings(); save(); };
+
+/* ================= undo / redo (tier list layout) ================= */
+const undoStack = [], redoStack = [];
+const layout = () => JSON.stringify({tiers: state.tiers, pool: state.pool});
+// call before every change of rows or of the images' placement
+function snap() {
+  undoStack.push(layout()); if (undoStack.length > 100) undoStack.shift();
+  redoStack.length = 0; updateUndoBtns();
+}
+function restoreLayout(s) {
+  const o = JSON.parse(s); state.tiers = o.tiers; state.pool = o.pool;
+  reconcile(); clearSel(); renderAll(); save(); updateUndoBtns();
+}
+function undoTier() { if (!undoStack.length) { toast(t('t_nothing_undo')); return; } redoStack.push(layout()); restoreLayout(undoStack.pop()); }
+function redoTier() { if (!redoStack.length) return; undoStack.push(layout()); restoreLayout(redoStack.pop()); }
+function updateUndoBtns() { $('#undoTier').disabled = !undoStack.length; $('#redoTier').disabled = !redoStack.length; }
+$('#undoTier').onclick = undoTier;
+$('#redoTier').onclick = redoTier;
 
 /* ================= render tier list ================= */
 function renderTiers() {
@@ -182,7 +348,7 @@ function updateCounts() {
     if (c) c.textContent = tier.items.length || '';
   });
 }
-function renderAll() { renderTiers(); renderPool(); updateCounts(); }
+function renderAll() { renderTiers(); renderPool(); updateCounts(); updateSelBar(); }
 function applyFilter() {
   const q = $('#search').value.trim().toLowerCase();
   for (const id of state.pool) el(id).style.display = !q || images.get(id).name.toLowerCase().includes(q) ? '' : 'none';
@@ -201,17 +367,40 @@ function refreshHover() {
   hovered = target?.closest?.('#view-tier .item')?.dataset.id || null;
 }
 function moveTo(ids, key) {
+  snap();
   removeEverywhere(ids);
   listOf(key).push(...ids);
   clearSel(); renderAll(); refreshHover(); save();
 }
 
 /* ================= selection ================= */
-function setSel(id, on) { on ? sel.add(id) : sel.delete(id); el(id).classList.toggle('sel', on); }
-function clearSel() { [...sel].forEach(id => setSel(id, false)); }
+function setSel(id, on) { on ? sel.add(id) : sel.delete(id); el(id).classList.toggle('sel', on); updateSelBar(); }
+function clearSel() { [...sel].forEach(id => { sel.delete(id); el(id).classList.remove('sel'); }); updateSelBar(); }
+const selected = () => [...document.querySelectorAll('#view-tier .item.sel')].map(x => x.dataset.id);
+// the bar at the bottom moves the selection with one tap — the main way to sort on a phone
+function updateSelBar() {
+  cancelAnimationFrame(updateSelBar.raf);
+  updateSelBar.raf = requestAnimationFrame(() => {
+    const bar = $('#selBar'), on = sel.size > 0 && view === 'tier';
+    bar.hidden = !on; if (!on) return;
+    $('#selCount').textContent = t('sel_n', {n: sel.size});
+    const box = $('#selTiers'); box.innerHTML = '';
+    state.tiers.forEach(x => {
+      const b = document.createElement('button'); b.className = 'sel-tier'; b.style.background = x.color;
+      b.textContent = (x.label.split('\n')[0] || '—').slice(0, 6); b.title = x.label; b.dataset.key = x.id; box.appendChild(b);
+    });
+    $('#selPool').title = t('sel_to_pool'); $('#selDel').title = t('sel_del'); $('#selClear').title = t('sel_clear');
+  });
+}
+$('#selTiers').onclick = e => { const b = e.target.closest('[data-key]'); if (b) moveTo(selected(), b.dataset.key); };
+$('#selPool').onclick = () => moveTo(selected(), 'pool');
+$('#selClear').onclick = clearSel;
+$('#selDel').onclick = () => { const ids = selected(); if (ids.length && confirm(t('c_delete', {n: ids.length}))) deleteImages(ids); };
+
+let suppressClick = 0;
 document.addEventListener('click', e => {
   const it = e.target.closest?.('#view-tier .item');
-  if (!it) return;
+  if (!it || Date.now() < suppressClick) return;
   const id = it.dataset.id;
   const prev = lastClicked && els.get(lastClicked);
   if (e.shiftKey && prev && prev.parentNode === it.parentNode) {
@@ -225,6 +414,7 @@ document.addEventListener('dblclick', e => {
   const it = e.target.closest?.('#view-tier .item');
   if (it && !it.closest('#pool')) moveTo([it.dataset.id], 'pool');
 });
+document.addEventListener('contextmenu', e => { if (TOUCH && e.target.closest?.('.item')) e.preventDefault(); });
 document.addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; }, {passive: true});
 document.addEventListener('mouseover', e => { hovered = e.target.closest?.('#view-tier .item')?.dataset.id || null; });
 
@@ -244,44 +434,50 @@ function insertPoint(box, x, y) {
   }
   return null;
 }
-function autoscroll(e) {
-  const sc = e.target instanceof Element && e.target.closest('.scroll'); if (!sc) return;
-  const r = sc.getBoundingClientRect(), z = 70;
-  if (e.clientY < r.top + z) sc.scrollTop -= 22; else if (e.clientY > r.bottom - z) sc.scrollTop += 22;
+function placeholderAt(target, x, y) {
+  const box = view === 'tier' ? dropBox(target) : null;
+  if (!box) return false;
+  const before = insertPoint(box, x, y);
+  if (ph.parentNode !== box || ph.nextSibling !== before) box.insertBefore(ph, before);
+  return true;
 }
-document.addEventListener('dragstart', e => {
-  const it = e.target.closest?.('.item'); if (!it || !it.dataset.id) return;
-  const id = it.dataset.id;
-  dragIds = sel.has(id) && sel.size > 1 ? [...document.querySelectorAll('#view-tier .item.sel')].map(x => x.dataset.id) : [id];
-  e.dataTransfer.effectAllowed = 'move';
-  e.dataTransfer.setData('text/plain', id);
+function autoscroll(target, y) {
+  const sc = target instanceof Element && target.closest('.scroll'); if (!sc) return;
+  const r = sc.getBoundingClientRect(), z = 70;
+  if (y < r.top + z) sc.scrollTop -= 22; else if (y > r.bottom - z) sc.scrollTop += 22;
+}
+function beginDrag(id) {
+  dragIds = sel.has(id) && sel.size > 1 ? selected() : [id];
   requestAnimationFrame(() => dragIds && dragIds.forEach(x => el(x).classList.add('dragging')));
-});
-document.addEventListener('dragend', () => {
+}
+function finishDrop() {
+  if (!ph.parentNode) return;
+  snap();
+  for (const id of dragIds) ph.parentNode.insertBefore(el(id), ph);
+  ph.remove(); syncFromDom(); clearSel(); updateCounts(); save();
+}
+function endDrag() {
   ph.remove();
   if (dragIds) dragIds.forEach(x => el(x).classList.remove('dragging'));
   dragIds = null;
+}
+document.addEventListener('dragstart', e => {
+  const it = e.target.closest?.('.item'); if (!it || !it.dataset.id) return;
+  beginDrag(it.dataset.id);
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', it.dataset.id);
 });
+document.addEventListener('dragend', endDrag);
 document.addEventListener('dragover', e => {
   const isFiles = !dragIds && [...e.dataTransfer.types].includes('Files');
   if (!dragIds && !isFiles) return;
-  autoscroll(e);
+  autoscroll(e.target, e.clientY);
   if (isFiles) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; return; }
-  const box = view === 'tier' ? dropBox(e.target) : null;
-  if (!box) return;
+  if (!placeholderAt(e.target, e.clientX, e.clientY)) return;
   e.preventDefault(); e.dataTransfer.dropEffect = 'move';
-  const before = insertPoint(box, e.clientX, e.clientY);
-  if (ph.parentNode !== box || ph.nextSibling !== before) box.insertBefore(ph, before);
 });
 document.addEventListener('drop', e => {
-  if (dragIds) {
-    e.preventDefault();
-    if (ph.parentNode) {
-      for (const id of dragIds) ph.parentNode.insertBefore(el(id), ph);
-      ph.remove(); syncFromDom(); clearSel(); updateCounts(); save();
-    }
-    return;
-  }
+  if (dragIds) { e.preventDefault(); finishDrop(); return; }
   if (e.dataTransfer.types.includes('Files')) {
     e.preventDefault();
     if (view === 'wheel' || view === 'case') { const m = view; filesFromDT(e.dataTransfer).then(files => addSpinFiles(files, m)); return; }
@@ -290,6 +486,62 @@ document.addEventListener('drop', e => {
     filesFromDT(e.dataTransfer).then(files => addFiles(files, key));
   }
 });
+
+// touch: hold an image for a moment, then drag it with the finger
+let touch = null;
+const ghost = document.createElement('div'); ghost.className = 'drag-ghost';
+document.addEventListener('touchstart', e => {
+  if (e.touches.length !== 1 || view !== 'tier') return;
+  const it = e.target.closest?.('#view-tier .item'); if (!it) return;
+  const p = e.touches[0];
+  touch = {x: p.clientX, y: p.clientY, started: false};
+  touch.timer = setTimeout(() => startTouchDrag(it), 280);
+}, {passive: true});
+document.addEventListener('touchmove', e => {
+  if (!touch) return;
+  const p = e.touches[0];
+  if (!touch.started) {
+    if (Math.hypot(p.clientX - touch.x, p.clientY - touch.y) > 10) { clearTimeout(touch.timer); touch = null; }  // it is a scroll
+    return;
+  }
+  e.preventDefault();
+  touch.x = p.clientX; touch.y = p.clientY; moveTouchDrag();
+}, {passive: false});
+document.addEventListener('touchend', () => endTouch(true));
+document.addEventListener('touchcancel', () => endTouch(false));
+function startTouchDrag(it) {
+  if (!touch) return;
+  touch.started = true;
+  beginDrag(it.dataset.id);
+  navigator.vibrate?.(15);
+  const r = it.getBoundingClientRect();
+  ghost.style.width = r.width + 'px'; ghost.style.height = r.height + 'px';
+  ghost.replaceChildren(it.querySelector('img').cloneNode());
+  if (dragIds.length > 1) { const n = document.createElement('span'); n.textContent = dragIds.length; ghost.appendChild(n); }
+  document.body.appendChild(ghost);
+  moveTouchDrag();
+  const loop = () => {
+    if (!touch?.started) return;
+    autoscroll(document.elementFromPoint(touch.x, touch.y), touch.y);
+    requestAnimationFrame(loop);
+  };
+  requestAnimationFrame(loop);
+}
+function moveTouchDrag() {
+  ghost.style.transform = `translate(${touch.x - ghost.offsetWidth / 2}px, ${touch.y - ghost.offsetHeight / 2}px)`;
+  placeholderAt(document.elementFromPoint(touch.x, touch.y), touch.x, touch.y);
+}
+function endTouch(drop) {
+  if (!touch) return;
+  clearTimeout(touch.timer);
+  if (touch.started) {
+    if (drop) finishDrop();
+    endDrag(); ghost.remove();
+    suppressClick = Date.now() + 500;
+  }
+  touch = null;
+}
+
 async function filesFromDT(dt) {
   const entries = [...(dt.items || [])].filter(i => i.kind === 'file').map(i => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
   if (!entries.length) return [...dt.files];
@@ -314,7 +566,7 @@ async function addFiles(files, key = 'pool') {
     const k = f.name + '|' + f.size;
     if (existing.has(k)) continue;
     existing.add(k);
-    recs.push({id: uid(), name: f.name.replace(/\.[^.]+$/, ''), key: k, blob: f});
+    recs.push({id: uid(), project, name: f.name.replace(/\.[^.]+$/, ''), key: k, blob: f});
   }
   if (!recs.length) { toast(t('t_no_new')); return; }
   recs.sort((a, b) => collator.compare(a.name, b.name));
@@ -331,6 +583,7 @@ async function deleteImages(ids) {
   removeEverywhere(ids);
   const s = new Set(ids);
   state.history = state.history.filter(h => !s.has(h.a) && !s.has(h.b));
+  spinForget(ids);
   ids.forEach(id => {
     delete state.elo[id];
     const im = images.get(id); if (im) URL.revokeObjectURL(im.url);
@@ -345,19 +598,19 @@ $('#fFiles').onchange = e => { addFiles([...e.target.files]); e.target.value = '
 $('#fDir').onchange = e => { addFiles([...e.target.files]); e.target.value = ''; };
 $('#wipeBtn').onclick = async () => {
   if (!images.size || !confirm(t('c_wipe', {n: images.size}))) return;
-  await tx('images', 'readwrite', s => s.clear());
-  images.forEach(im => URL.revokeObjectURL(im.url));
-  images.clear(); els.clear(); sel.clear();
-  state.tiers.forEach(x => x.items = []); state.pool = []; state.elo = {}; state.history = []; state.cmpCount = 0;
-  pair = null; renderAll(); save();
+  await deleteImages([...images.keys()]);
+  state.elo = {}; state.history = []; state.cmpCount = 0;
+  undoStack.length = redoStack.length = 0; updateUndoBtns(); save();
 };
 $('#resetBtn').onclick = () => {
   if (!confirm(t('c_reset'))) return;
+  snap();
   state.tiers.forEach(x => { state.pool.push(...x.items); x.items = []; });
   clearSel(); renderAll(); save();
 };
-$('#sortBtn').onclick = () => { state.pool.sort((a, b) => collator.compare(images.get(a).name, images.get(b).name)); renderPool(); save(); };
+$('#sortBtn').onclick = () => { snap(); state.pool.sort((a, b) => collator.compare(images.get(a).name, images.get(b).name)); renderPool(); save(); };
 $('#shuffleBtn').onclick = () => {
+  snap();
   const p = state.pool;
   for (let i = p.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [p[i], p[j]] = [p[j], p[i]]; }
   renderPool(); save();
@@ -368,15 +621,16 @@ $('#tiers').addEventListener('click', e => {
   const row = e.target.closest('.tier'); if (!row) return;
   const i = state.tiers.findIndex(x => x.id === row.dataset.tier);
   if (e.target.closest('.gear')) openTierModal(row.dataset.tier);
-  else if (e.target.closest('.up') && i > 0) { [state.tiers[i - 1], state.tiers[i]] = [state.tiers[i], state.tiers[i - 1]]; renderAll(); save(); }
-  else if (e.target.closest('.down') && i < state.tiers.length - 1) { [state.tiers[i + 1], state.tiers[i]] = [state.tiers[i], state.tiers[i + 1]]; renderAll(); save(); }
+  else if (e.target.closest('.up') && i > 0) { snap(); [state.tiers[i - 1], state.tiers[i]] = [state.tiers[i], state.tiers[i - 1]]; renderAll(); save(); }
+  else if (e.target.closest('.down') && i < state.tiers.length - 1) { snap(); [state.tiers[i + 1], state.tiers[i]] = [state.tiers[i], state.tiers[i + 1]]; renderAll(); save(); }
 });
 $('#tiers').addEventListener('dblclick', e => { const l = e.target.closest('.label'); if (l) openTierModal(l.parentNode.dataset.tier); });
 function newTier() { return {id: uid(), label: t('new_row'), color: COLORS[state.tiers.length % COLORS.length], items: []}; }
-$('#addRow').onclick = () => { state.tiers.push(newTier()); renderAll(); save(); };
+$('#addRow').onclick = () => { snap(); state.tiers.push(newTier()); renderAll(); save(); };
 
+let modalSnapped = false;
 function openTierModal(id) {
-  editTier = id;
+  editTier = id; modalSnapped = false;
   const tier = curTier();
   const box = $('#mColors'); box.innerHTML = '';
   COLORS.forEach(c => {
@@ -388,34 +642,37 @@ function openTierModal(id) {
   cc.appendChild(ci); box.appendChild(cc);
   $('#mLabel').value = tier.label;
   $('#tierModal').classList.add('open');
-  setTimeout(() => $('#mLabel').focus(), 0);
+  if (!TOUCH) setTimeout(() => $('#mLabel').focus(), 0);
 }
 function curTier() { return state.tiers.find(x => x.id === editTier); }
+function snapOnce() { if (!modalSnapped) { snap(); modalSnapped = true; } }  // one undo step per editing session
 function setTierColor(c) {
+  snapOnce();
   curTier().color = c;
   document.querySelector(`.tier[data-tier="${editTier}"] .label`).style.background = c;
   document.querySelectorAll('#mColors .color').forEach(b => b.classList.toggle('on', b.dataset.c === c));
   save();
 }
-function closeModal() { $('#tierModal').classList.remove('open'); editTier = null; }
-$('#mLabel').oninput = e => { curTier().label = e.target.value; document.querySelector(`.tier[data-tier="${editTier}"] .txt`).textContent = e.target.value; save(); };
+function closeModal() { $('#tierModal').classList.remove('open'); editTier = null; updateSelBar(); }
+$('#mLabel').oninput = e => { snapOnce(); curTier().label = e.target.value; document.querySelector(`.tier[data-tier="${editTier}"] .txt`).textContent = e.target.value; save(); };
 $('#mClose').onclick = closeModal;
 $('#tierModal').onmousedown = e => { if (e.target === $('#tierModal')) closeModal(); };
 $('#mDel').onclick = () => {
+  snapOnce();
   const i = state.tiers.findIndex(x => x.id === editTier);
   state.pool.push(...state.tiers[i].items); state.tiers.splice(i, 1);
   delete state.scope[editTier]; closeModal(); renderAll(); save();
 };
-$('#mClear').onclick = () => { const tier = curTier(); state.pool.push(...tier.items); tier.items = []; closeModal(); renderAll(); save(); };
-$('#mAbove').onclick = () => { const i = state.tiers.findIndex(x => x.id === editTier); state.tiers.splice(i, 0, newTier()); closeModal(); renderAll(); save(); };
-$('#mBelow').onclick = () => { const i = state.tiers.findIndex(x => x.id === editTier); state.tiers.splice(i + 1, 0, newTier()); closeModal(); renderAll(); save(); };
+$('#mClear').onclick = () => { snapOnce(); const tier = curTier(); state.pool.push(...tier.items); tier.items = []; closeModal(); renderAll(); save(); };
+$('#mAbove').onclick = () => { snapOnce(); const i = state.tiers.findIndex(x => x.id === editTier); state.tiers.splice(i, 0, newTier()); closeModal(); renderAll(); save(); };
+$('#mBelow').onclick = () => { snapOnce(); const i = state.tiers.findIndex(x => x.id === editTier); state.tiers.splice(i + 1, 0, newTier()); closeModal(); renderAll(); save(); };
 
 /* ================= splitter / presentation ================= */
-$('#splitter').onmousedown = e => {
+$('#splitter').onpointerdown = e => {
   e.preventDefault();
-  const move = ev => { state.settings.poolH = Math.min(80, Math.max(10, (innerHeight - ev.clientY) / innerHeight * 100)); applySettings(); };
-  const up = () => { removeEventListener('mousemove', move); removeEventListener('mouseup', up); save(); };
-  addEventListener('mousemove', move); addEventListener('mouseup', up);
+  const sp = e.currentTarget; sp.setPointerCapture(e.pointerId);
+  sp.onpointermove = ev => { state.settings.poolH = Math.min(80, Math.max(10, (innerHeight - ev.clientY) / innerHeight * 100)); applySettings(); };
+  sp.onpointerup = sp.onpointercancel = () => { sp.onpointermove = sp.onpointerup = sp.onpointercancel = null; save(); };
 };
 function togglePresent(on) { document.body.classList.toggle('present', on); clearSel(); }
 $('#presentBtn').onclick = () => togglePresent(true);
@@ -618,6 +875,41 @@ $('#resPng').onclick = async () => {
   canvasToFile(cv, 'ranking.png');
 };
 
+// put the compared images into the rows by rating; the shares per row are editable
+$('#autoTier').onclick = () => {
+  const {rated} = resIds();
+  if (!rated.length) { toast(t('t_compare_first')); return; }
+  const n = state.tiers.length;
+  const defaults = n === 5 ? [10, 20, 30, 25, 15] : state.tiers.map((_, i) => Math.round(100 / n) + (i < 100 % n ? 1 : 0));
+  const body = document.createElement('div');
+  body.innerHTML = `<p class="muted dlg-hint"></p><div class="auto-rows"></div>`;
+  body.querySelector('.dlg-hint').textContent = t('auto_hint');
+  const rowsBox = body.querySelector('.auto-rows');
+  state.tiers.forEach((x, i) => {
+    const r = document.createElement('label'); r.className = 'auto-row';
+    r.innerHTML = `<span class="auto-lbl"></span><input type="number" min="0" max="100" step="1"><span class="muted">%</span><span class="muted auto-n"></span>`;
+    const lbl = r.querySelector('.auto-lbl'); lbl.textContent = x.label.split('\n')[0] || '—'; lbl.style.background = x.color;
+    r.querySelector('input').value = defaults[i] ?? 0;
+    rowsBox.appendChild(r);
+  });
+  const inputs = [...rowsBox.querySelectorAll('input')];
+  const counts = () => {
+    const p = inputs.map(x => Math.max(0, +x.value || 0)), sum = p.reduce((a, b) => a + b, 0) || 1;
+    let acc = 0; const bounds = p.map(v => Math.round((acc += v) / sum * rated.length));
+    return bounds.map((b, i) => b - (i ? bounds[i - 1] : 0));
+  };
+  const preview = () => counts().forEach((c, i) => rowsBox.children[i].querySelector('.auto-n').textContent = `→ ${c}`);
+  rowsBox.oninput = preview; preview();
+  dialog({title: t('auto_title'), body, ok: t('auto_apply'), onOk: () => {
+    const cs = counts(); snap();
+    removeEverywhere(rated);
+    let k = 0;
+    state.tiers.forEach((x, i) => { x.items = [...rated.slice(k, k + cs[i]), ...x.items]; k += cs[i]; });
+    renderAll(); save(); setView('tier');
+    toast(t('t_auto_done', {n: rated.length}));
+  }});
+};
+
 /* ================= views & keys ================= */
 function setView(v) {
   view = v; state.view = v; save();
@@ -626,6 +918,7 @@ function setView(v) {
   document.querySelectorAll('.tier-only').forEach(x => x.style.display = v === 'tier' ? '' : 'none');
   const spinView = v === 'wheel' || v === 'case';
   document.querySelectorAll('.grid-opt').forEach(x => x.style.display = spinView ? 'none' : '');
+  updateSelBar();
   if (v === 'cmp') { renderScope(); showPair(); }
   if (v === 'res') renderResults();
   if (spinView) spinShow(v);
@@ -639,11 +932,22 @@ function digitOf(e) {
   return /^[0-9]$/.test(e.key) ? +e.key : null;
 }
 document.addEventListener('keydown', e => {
+  if ($('#dlg').classList.contains('open')) {
+    if (e.key === 'Escape') closeDialog();
+    else if (e.key === 'Enter' && !e.target.matches('textarea')) { e.preventDefault(); confirmDialog(); }
+    return;
+  }
   if ($('#tierModal').classList.contains('open')) { if (e.key === 'Escape') closeModal(); return; }
   if (spinKey(e)) return;
-  if (e.target.matches('input, textarea, select') || e.ctrlKey || e.altKey || e.metaKey) return;
+  if (e.target.matches('input, textarea, select')) return;
+  if (view === 'tier' && (e.ctrlKey || e.metaKey) && !e.altKey) {
+    if (e.code === 'KeyZ') { e.preventDefault(); e.shiftKey ? redoTier() : undoTier(); }
+    else if (e.code === 'KeyY') { e.preventDefault(); redoTier(); }
+    return;
+  }
+  if (e.ctrlKey || e.altKey || e.metaKey) return;
   if (view === 'tier') {
-    const targets = () => sel.size ? [...document.querySelectorAll('#view-tier .item.sel')].map(x => x.dataset.id) : hovered ? [hovered] : [];
+    const targets = () => sel.size ? selected() : hovered ? [hovered] : [];
     const n = digitOf(e);
     if (n !== null) {
       const ids = targets(); if (!ids.length) return;
@@ -666,6 +970,7 @@ document.addEventListener('keydown', e => {
     e.preventDefault();
   }
 });
+addEventListener('pagehide', () => { if (state) saveNow(); });
 
 /* ================= init ================= */
 spinSetup();
@@ -674,18 +979,17 @@ setLang(detectLang());
   try { db = await openDB(); }
   catch { alert(t('idb_fail')); return; }
   navigator.storage?.persist?.();
-  const recs = await tx('images', 'readonly', s => s.getAll());
+  meta = await tx('kv', 'readonly', s => s.get('meta')) || {current: 'default', projects: [{id: 'default', name: ''}]};
+  if (!meta.projects.some(p => p.id === meta.current)) meta.current = meta.projects[0].id;
+  project = meta.current;
+  const recs = (await tx('images', 'readonly', s => s.getAll())).filter(r => projOf(r) === project);
   recs.forEach(r => images.set(r.id, {...r, url: URL.createObjectURL(r.blob)}));
-  state = await tx('kv', 'readonly', s => s.get('state')) || defaultState();
+  state = await tx('kv', 'readonly', s => s.get(stateKey(project))) || defaultState();
   state.settings = {...DEFAULT_SETTINGS, ...state.settings};
   for (const k of ['elo', 'scope']) state[k] ||= {};
   state.history ||= [];
-  // reconcile the saved lists with the images actually stored
-  const seen = new Set(), keep = id => images.has(id) && !seen.has(id) && seen.add(id);
-  state.tiers.forEach(x => x.items = x.items.filter(keep));
-  state.pool = state.pool.filter(keep);
-  const missing = [...images.keys()].filter(id => !seen.has(id)).sort((a, b) => collator.compare(images.get(a).name, images.get(b).name));
-  state.pool.push(...missing);
+  reconcile();
   await spinLoad();
+  renderProjects(); updateUndoBtns();
   applySettings(); renderAll(); setView(state.view || 'tier');
 })();

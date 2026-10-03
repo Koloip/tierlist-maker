@@ -7,10 +7,30 @@
 <meta name="description" content="Free, offline tier list maker with no image limit, plus a pairwise comparison mode. Your images never leave your browser.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect y='1' width='32' height='9' rx='2' fill='%23ff7f7f'/%3E%3Crect y='12' width='24' height='9' rx='2' fill='%23ffdf7f'/%3E%3Crect y='23' width='16' height='9' rx='2' fill='%23bfff7f'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="style.css">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#252525">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 </head>
 <body>
 
 <header>
+  <div class="proj">
+    <div class="menu-wrap">
+      <button class="btn icon-btn" id="menuBtn" data-i18n-title="menu">☰</button>
+      <div class="menu" id="menu" hidden>
+        <button data-act="newProj" data-i18n="proj_new"></button>
+        <button data-act="renameProj" data-i18n="proj_rename"></button>
+        <button data-act="deleteProj" data-i18n="proj_delete"></button>
+        <hr>
+        <button data-act="exportProj" data-i18n="exp"></button>
+        <button data-act="importProj" data-i18n="imp"></button>
+        <hr id="installSep">
+        <button data-act="install" id="installItem" data-i18n="install" hidden></button>
+      </div>
+    </div>
+    <select id="project"></select>
+    <input type="file" id="fImport" accept=".json,application/json" hidden>
+  </div>
   <div class="tabs">
     <button class="tab" data-view="tier" data-i18n="tab_tier"></button>
     <button class="tab" data-view="cmp" data-i18n="tab_cmp"></button>
@@ -29,6 +49,10 @@
     </label>
     <label class="grid-opt"><input type="checkbox" id="captions"> <span data-i18n="captions"></span></label>
     <span class="spacer"></span>
+    <span class="tier-only undo-btns">
+      <button class="btn icon-btn" id="undoTier" data-i18n-title="undo_tip">↶</button>
+      <button class="btn icon-btn" id="redoTier" data-i18n-title="redo_tip">↷</button>
+    </span>
     <label class="tier-only"><span data-i18n="bg"></span> <input type="color" id="bg"></label>
     <button class="btn tier-only" id="presentBtn" data-i18n="present"></button>
     <button class="btn tier-only danger" id="resetBtn" data-i18n="reset"></button>
@@ -101,6 +125,7 @@
     <span id="resInfo" class="muted"></span>
     <label><input type="checkbox" id="showUnrated" checked> <span data-i18n="show_unrated"></span></label>
     <span class="spacer"></span>
+    <button class="btn" id="autoTier" data-i18n="auto_btn"></button>
     <button class="btn primary" id="resPng" data-i18n="png"></button>
   </div>
   <div class="grid scroll" id="grid"></div>
@@ -151,6 +176,25 @@
 </section>
 
 <button class="btn" id="exitPresent" data-i18n="exit_present"></button>
+
+<div id="selBar" hidden>
+  <span id="selCount"></span>
+  <div id="selTiers"></div>
+  <button class="btn icon-btn" id="selPool">↩</button>
+  <button class="btn icon-btn danger" id="selDel">🗑</button>
+  <button class="btn icon-btn" id="selClear">✕</button>
+</div>
+
+<div class="modal-bg" id="dlg">
+  <div class="dlg">
+    <h3 id="dlgTitle"></h3>
+    <div id="dlgBody"></div>
+    <div class="dlg-btns">
+      <button class="btn" id="dlgCancel"></button>
+      <button class="btn primary" id="dlgOk"></button>
+    </div>
+  </div>
+</div>
 
 <div class="modal-bg" id="tierModal">
   <div class="modal">
