@@ -69,6 +69,12 @@ function spinSetup() {
   }
   $('#wheelRemove').onchange = e => { cfg('wheel').removeWin = e.target.checked; save(); };
   $('#caseCs').onclick = applyCsOdds;
+  $('#caseBg').onclick = () => $('#fCaseBg').click();
+  $('#caseSnd').onclick = () => $('#fCaseSnd').click();
+  $('#fCaseBg').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (f && isImageFile(f)) setCaseAsset('bg', f); };
+  $('#fCaseSnd').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (f) setCaseAsset('snd', f); };
+  $('#caseBgOff').onclick = () => setCaseAsset('bg', null);
+  $('#caseSndOff').onclick = () => setCaseAsset('snd', null);
   $('#wheelSpin').onclick = $('#wheelHub').onclick = $('#wheelCv').onclick = () => spinWheel();
   $('#caseOpen').onclick = () => openCase();
   $('#winOk').onclick = () => closeWin(false);
@@ -105,8 +111,91 @@ function spinLang() {
     showDur(m); renderSpinList(m);
   }
   $('#wheelRemove').checked = cfg('wheel').removeWin;
+  applyCaseAssets();
   drawWheel();
 }
+
+/* ================= case background & win sound ================= */
+// the user's own picture behind the case and own sound on a drop; stored like the other images, only in this browser
+async function setCaseAsset(kind, file) {
+  const c = cfg('case');
+  if (file) {
+    const id = uid(), rec = {id, project, name: file.name, key: kind + ':' + file.name + '|' + file.size,
+      blob: new Blob([await file.arrayBuffer()], {type: file.type || (kind === 'bg' ? 'image/jpeg' : 'audio/mpeg')})};
+    await tx('spin', 'readwrite', s => s.put(rec));
+    simgs.set(id, {...rec, url: URL.createObjectURL(rec.blob)});
+    c[kind] = id;
+  } else delete c[kind];
+  save(); await gcSpinImages(); applyCaseAssets();
+  if (kind === 'snd' && file) playWinSound();
+}
+function applyCaseAssets() {
+  const c = cfg('case'), bg = imOf(c.bg);
+  const main = secOf('case').querySelector('.spin-main');
+  main.style.backgroundImage = bg ? `linear-gradient(rgba(0,0,0,.25), rgba(0,0,0,.55)), url("${bg.url}")` : '';
+  main.classList.toggle('has-bg', !!bg);
+  $('#caseBgOff').hidden = !bg; $('#caseSndOff').hidden = !imOf(c.snd);
+}
+function playWinSound() {
+  const s = imOf(cfg('case').snd); if (!s) return false;
+  const a = new Audio(s.url); a.play().catch(() => {});
+  return true;
+}
+
+/* ================= particles ================= */
+// a burst whose size and colors grow with the rarity: a few blue sparks for Mil-Spec, a gold shower for a rare special item
+const FX = [
+  {n: 40, sp: 7, colors: ['#4b69ff', '#9aaeff']},
+  {n: 80, sp: 9, colors: ['#8847ff', '#c7a6ff', '#ffffff']},
+  {n: 150, sp: 11, colors: ['#d32ce6', '#f7a3ff', '#ffffff'], ring: 1},
+  {n: 240, sp: 13, colors: ['#eb4b4b', '#ff9e9e', '#ffd27a', '#ffffff'], ring: 2},
+  {n: 380, sp: 15, colors: ['#e4ae39', '#ffd700', '#fff3b0', '#ffffff'], ring: 3, rain: 160},
+];
+const parts = [], rings = [];
+let fxRunning = false;
+function burst(x, y, level) {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const f = FX[Math.max(0, Math.min(FX.length - 1, level))], cv = $('#fx');
+  cv.width = innerWidth; cv.height = innerHeight;
+  const pick = () => f.colors[Math.floor(Math.random() * f.colors.length)];
+  for (let i = 0; i < f.n; i++) {
+    const a = Math.random() * TAU, v = f.sp * (.3 + Math.random() * .9);
+    parts.push({x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - f.sp * .35, life: 1, decay: .008 + Math.random() * .012,
+      size: 2 + Math.random() * 4, color: pick(), rect: Math.random() < .5, rot: Math.random() * TAU, vr: (Math.random() - .5) * .4});
+  }
+  for (let i = 0; i < (f.rain || 0); i++) {  // confetti falling over the whole screen
+    parts.push({x: Math.random() * innerWidth, y: -20 - Math.random() * innerHeight * .6, vx: (Math.random() - .5) * 2, vy: 2 + Math.random() * 3,
+      life: 1, decay: .004 + Math.random() * .004, size: 4 + Math.random() * 5, color: pick(), rect: true, rot: Math.random() * TAU, vr: (Math.random() - .5) * .3, fall: true});
+  }
+  for (let i = 0; i < (f.ring || 0); i++) rings.push({x, y, r: 10, delay: i * 10, color: f.colors[0], life: 1});
+  if (!fxRunning) { fxRunning = true; requestAnimationFrame(fxFrame); }
+}
+function fxFrame() {
+  const cv = $('#fx'), ctx = cv.getContext('2d');
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const p = parts[i];
+    p.x += p.vx; p.y += p.vy; p.rot += p.vr;
+    if (p.fall) p.vx += (Math.random() - .5) * .2; else { p.vx *= .985; p.vy = p.vy * .985 + .18; }
+    p.life -= p.decay;
+    if (p.life <= 0 || p.y > cv.height + 30) { parts.splice(i, 1); continue; }
+    ctx.globalAlpha = Math.min(1, p.life * 1.5); ctx.fillStyle = p.color;
+    if (p.rect) { ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2); ctx.restore(); }
+    else { ctx.beginPath(); ctx.arc(p.x, p.y, p.size / 2, 0, TAU); ctx.fill(); }
+  }
+  for (let i = rings.length - 1; i >= 0; i--) {
+    const g = rings[i];
+    if (g.delay-- > 0) continue;
+    g.r += 9; g.life -= .025;
+    if (g.life <= 0) { rings.splice(i, 1); continue; }
+    ctx.globalAlpha = g.life; ctx.strokeStyle = g.color; ctx.lineWidth = 6 * g.life;
+    ctx.beginPath(); ctx.arc(g.x, g.y, g.r, 0, TAU); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  if (parts.length || rings.length) requestAnimationFrame(fxFrame);
+  else { fxRunning = false; ctx.clearRect(0, 0, cv.width, cv.height); }
+}
+const centerOf = node => { const r = node.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; };
 function showDur(m) { secOf(m).querySelector('.sdur-v').textContent = `${cfg(m).dur} ${t('sp_sec')}`; }
 
 function spinShow(v) {
@@ -116,7 +205,7 @@ function spinShow(v) {
 
 // images no item refers to any more are removed from the database
 async function gcSpinImages() {
-  const used = new Set(MODES.flatMap(m => cfg(m).items.map(it => it.img)).filter(Boolean));
+  const used = new Set([...MODES.flatMap(m => cfg(m).items.map(it => it.img)), cfg('case').bg, cfg('case').snd].filter(Boolean));
   const dead = [...simgs.keys()].filter(id => !used.has(id));
   if (!dead.length) return;
   dead.forEach(id => { URL.revokeObjectURL(simgs.get(id).url); simgs.delete(id); thumbs.delete(id); });
@@ -467,6 +556,7 @@ function spinWheel() {
     wheelAngle = end % TAU; cv.style.transform = `rotate(${wheelAngle}rad)`;
     setBusy('wheel', false);
     if (c.sound) ding();
+    burst(...centerOf($('#wheelBox')), 2);
     showWin('wheel', list[w]);
   });
 }
@@ -517,7 +607,8 @@ function openCase() {
     if (k !== idx) { idx = k; if (c.sound) tick(1500); }
   }, () => {
     cards[winIdx].classList.add('won');
-    if (c.sound) ding();
+    if (c.sound && !playWinSound()) ding();
+    burst(...centerOf(cards[winIdx]), list[win].r || 0);
     setTimeout(() => { setBusy('case', false); showWin('case', list[win]); }, 450);
   });
 }

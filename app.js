@@ -258,7 +258,10 @@ async function importProj(file) {
   s.pool = (s.pool || []).map(re);
   s.elo = Object.fromEntries(Object.entries(s.elo || {}).map(([k, v]) => [re(k), v]));
   s.history = (s.history || []).map(h => ({...h, a: re(h.a), b: re(h.b)}));
-  if (s.spin) for (const m of Object.values(s.spin)) (m.items || []).forEach(it => { if (it.img) it.img = re(it.img); });
+  if (s.spin) for (const m of Object.values(s.spin)) {
+    (m.items || []).forEach(it => { if (it.img) it.img = re(it.img); });
+    for (const k of ['bg', 'snd']) if (m[k]) m[k] = re(m[k]);
+  }
   await tx('images', 'readwrite', st => imgs.forEach(r => st.put(r)));
   await tx('spin', 'readwrite', st => spins.forEach(r => st.put(r)));
   await tx('kv', 'readwrite', st => st.put(s, stateKey(id)));

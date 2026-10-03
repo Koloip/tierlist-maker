@@ -160,6 +160,10 @@
       <label class="dur"><span data-i18n="sp_dur"></span> <input type="range" class="sdur" min="1" max="30" step="0.5"> <b class="sdur-v"></b></label>
       <label><input type="checkbox" class="ssound"> <span data-i18n="sp_sound"></span></label>
       <span class="spacer"></span>
+      <span class="asset"><button class="btn" id="caseBg" data-i18n="sp_bg"></button><button class="btn icon-btn" id="caseBgOff" data-i18n-title="sp_bg_off" hidden>✕</button></span>
+      <span class="asset"><button class="btn" id="caseSnd" data-i18n="sp_snd"></button><button class="btn icon-btn" id="caseSndOff" data-i18n-title="sp_snd_off" hidden>✕</button></span>
+      <input type="file" id="fCaseBg" accept="image/*" hidden>
+      <input type="file" id="fCaseSnd" accept="audio/*,.mp3,.ogg,.wav,.m4a" hidden>
       <button class="btn" id="caseCs" data-i18n="sp_cs_odds" data-i18n-title="sp_cs_tip"></button>
     </div>
     <div class="case-area">
@@ -219,6 +223,7 @@
     </div>
   </div>
 </div>
+<canvas id="fx"></canvas>
 <div id="toast"></div>
 
 <script src="i18n.js"></script>

@@ -54,6 +54,7 @@ const I18N = {
     auto_btn: 'Put into tiers', auto_title: 'Put into tiers by rating',
     auto_hint: 'Share of the compared images for each row, %. The best go to the top row; images without comparisons stay where they are.',
     auto_apply: 'Apply', t_auto_done: 'Placed into tiers: {n}',
+    sp_bg: 'Background…', sp_bg_off: 'Remove the background', sp_snd: 'Win sound…', sp_snd_off: 'Remove the win sound',
   },
 
   ru: {
@@ -109,6 +110,7 @@ const I18N = {
     auto_btn: 'Разложить по тирам', auto_title: 'Разложить по тирам по рейтингу',
     auto_hint: 'Какая доля сравнённых картинок попадёт в каждый ряд, %. Лучшие идут в верхний ряд, картинки без сравнений остаются на своих местах.',
     auto_apply: 'Разложить', t_auto_done: 'Разложено по тирам: {n}',
+    sp_bg: 'Фон…', sp_bg_off: 'Убрать фон', sp_snd: 'Звук выпадения…', sp_snd_off: 'Убрать свой звук',
   },
 
   uk: {
@@ -164,6 +166,7 @@ const I18N = {
     auto_btn: 'Розкласти по тірах', auto_title: 'Розкласти по тірах за рейтингом',
     auto_hint: 'Яка частка порівняних картинок потрапить у кожен ряд, %. Найкращі йдуть у верхній ряд, картинки без порівнянь лишаються на своїх місцях.',
     auto_apply: 'Розкласти', t_auto_done: 'Розкладено по тірах: {n}',
+    sp_bg: 'Фон…', sp_bg_off: 'Прибрати фон', sp_snd: 'Звук випадіння…', sp_snd_off: 'Прибрати свій звук',
   },
 
   de: {
@@ -219,6 +222,7 @@ const I18N = {
     auto_btn: 'In Tiers einordnen', auto_title: 'Nach Wertung in Tiers einordnen',
     auto_hint: 'Anteil der verglichenen Bilder pro Reihe in %. Die besten kommen in die oberste Reihe; Bilder ohne Vergleich bleiben, wo sie sind.',
     auto_apply: 'Einordnen', t_auto_done: 'In Tiers eingeordnet: {n}',
+    sp_bg: 'Hintergrund…', sp_bg_off: 'Hintergrund entfernen', sp_snd: 'Gewinnton…', sp_snd_off: 'Eigenen Ton entfernen',
   },
 
   fr: {
@@ -274,6 +278,7 @@ const I18N = {
     auto_btn: 'Ranger dans les tiers', auto_title: 'Ranger dans les tiers selon le score',
     auto_hint: 'Part des images comparées pour chaque rangée, en %. Les meilleures vont dans la rangée du haut ; les images sans comparaison restent à leur place.',
     auto_apply: 'Ranger', t_auto_done: 'Rangées dans les tiers : {n}',
+    sp_bg: 'Arrière-plan…', sp_bg_off: 'Retirer l’arrière-plan', sp_snd: 'Son de gain…', sp_snd_off: 'Retirer le son',
   },
 
   es: {
@@ -329,6 +334,7 @@ const I18N = {
     auto_btn: 'Repartir en filas', auto_title: 'Repartir en filas según la puntuación',
     auto_hint: 'Porcentaje de imágenes comparadas para cada fila. Las mejores van a la fila de arriba; las imágenes sin comparar se quedan donde están.',
     auto_apply: 'Repartir', t_auto_done: 'Repartidas en filas: {n}',
+    sp_bg: 'Fondo…', sp_bg_off: 'Quitar el fondo', sp_snd: 'Sonido de premio…', sp_snd_off: 'Quitar el sonido',
   },
 
   pt: {
@@ -384,6 +390,7 @@ const I18N = {
     auto_btn: 'Distribuir nas linhas', auto_title: 'Distribuir nas linhas pela pontuação',
     auto_hint: 'Porcentagem das imagens comparadas para cada linha. As melhores vão para a linha de cima; imagens sem comparação ficam onde estão.',
     auto_apply: 'Distribuir', t_auto_done: 'Distribuídas nas linhas: {n}',
+    sp_bg: 'Fundo…', sp_bg_off: 'Remover o fundo', sp_snd: 'Som do prêmio…', sp_snd_off: 'Remover o som',
   },
 
   pl: {
@@ -439,6 +446,7 @@ const I18N = {
     auto_btn: 'Rozłóż na rzędy', auto_title: 'Rozłóż na rzędy według rankingu',
     auto_hint: 'Jaki odsetek porównanych obrazów trafi do każdego rzędu, %. Najlepsze idą do górnego rzędu; obrazy bez porównań zostają na miejscu.',
     auto_apply: 'Rozłóż', t_auto_done: 'Rozłożono na rzędy: {n}',
+    sp_bg: 'Tło…', sp_bg_off: 'Usuń tło', sp_snd: 'Dźwięk wygranej…', sp_snd_off: 'Usuń własny dźwięk',
   },
 
   tr: {
@@ -494,6 +502,7 @@ const I18N = {
     auto_btn: 'Satırlara dağıt', auto_title: 'Puana göre satırlara dağıt',
     auto_hint: 'Her satıra giden karşılaştırılmış görsellerin yüzdesi. En iyiler en üst satıra gider; karşılaştırılmamış görseller yerinde kalır.',
     auto_apply: 'Dağıt', t_auto_done: 'Satırlara dağıtıldı: {n}',
+    sp_bg: 'Arka plan…', sp_bg_off: 'Arka planı kaldır', sp_snd: 'Kazanma sesi…', sp_snd_off: 'Sesi kaldır',
   },
 
   zh: {
@@ -549,6 +558,7 @@ const I18N = {
     auto_btn: '按评分分级', auto_title: '按评分放入各行',
     auto_hint: '每一行分到的已比较图片比例（%）。最好的放在最上面一行，未比较的图片保持原位。',
     auto_apply: '应用', t_auto_done: '已分级：{n} 张',
+    sp_bg: '背景…', sp_bg_off: '移除背景', sp_snd: '开出音效…', sp_snd_off: '移除自定义音效',
   },
 
   ja: {
@@ -604,5 +614,6 @@ const I18N = {
     auto_btn: 'ティアに振り分け', auto_title: 'レーティング順にティアへ振り分け',
     auto_hint: '各行に入れる比較済み画像の割合（%）。上位ほど上の行へ。未比較の画像はそのままです。',
     auto_apply: '振り分ける', t_auto_done: 'ティアに振り分け：{n} 件',
+    sp_bg: '背景…', sp_bg_off: '背景を削除', sp_snd: '当たりの効果音…', sp_snd_off: '効果音を削除',
   },
 };

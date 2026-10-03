@@ -264,3 +264,11 @@ body.present #exitPresent{display:block}
   .grid{padding:8px}
   #selBar{bottom:10px;padding:6px 8px;gap:6px}
 }
+
+/* ---------- case background & particles ---------- */
+#view-case .spin-main{background-size:cover;background-position:center}
+#view-case .spin-main.has-bg .bar{background:rgba(37,37,37,.85)}
+#view-case .spin-main.has-bg .keys{color:#ddd;text-shadow:0 1px 3px #000}
+.asset{display:flex;gap:2px}
+.asset [hidden]{display:none}
+#fx{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:55}
