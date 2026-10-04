@@ -6,7 +6,7 @@
 const TOUR_SIZES = [4, 8, 16, 32, 64, 128];
 // state.tour: {rounds: [[{a, b, w, bye}]], hist: [{r, m, elo}], elo, done}; state.tourCfg: the settings bar
 const tcfg = () => state.tourCfg || (state.tourCfg = {scope: {}, size: 16, seed: 'rating', elo: true});
-const tourIm = id => (id && images.get(id)) || null;
+const tourIm = id => imOf(id) || null;
 
 function tourSetup() {
   $('#tourStart').onclick = startTour;
@@ -22,6 +22,7 @@ function tourSetup() {
 function tourShow() { renderTourBar(); renderTour(); }
 
 function tourCandidates() {
+  if (tcfg().src === 'own') return ownIds();
   const c = tcfg(), ids = [];
   state.tiers.forEach(x => { if (c.scope[x.id] !== false) ids.push(...x.items); });
   if (c.scope.pool !== false) ids.push(...state.pool);
@@ -42,7 +43,7 @@ function renderTourBar() {
   $('#tourSize').innerHTML = sizes.map(s => `<option value="${s}">${s}</option>`).join('') + `<option value="0">${t('tour_all')} (${n})</option>`;
   $('#tourSize').value = sizes.includes(c.size) ? c.size : 0;
   $('#tourSeed').value = c.seed; $('#tourElo').checked = c.elo;
-  $('#tourUndo').disabled = !state.tour?.hist?.length;
+  $('#tourUndo').disabled = !state.tour?.hist?.length || tourHidden();
 }
 
 // standard bracket order: for 8 slots it is 1 8 4 5 2 7 3 6, so the best seeds meet as late as possible
@@ -65,7 +66,7 @@ async function startTour() {
   const rounds = [];
   for (let r = 0; size >> (r + 1) >= 1; r++) rounds.push(Array.from({length: size >> (r + 1)}, () => ({a: null, b: null, w: null})));
   rounds[0].forEach((mt, m) => { mt.a = slots[2 * m]; mt.b = slots[2 * m + 1]; });
-  state.tour = {rounds, hist: [], elo: c.elo, done: false};
+  state.tour = {rounds, hist: [], elo: c.elo, done: false, src: c.src === 'own' ? 'own' : 'tier'};
   rounds[0].forEach((mt, m) => { if (!mt.a || !mt.b) { mt.w = mt.a || mt.b; mt.bye = true; advance(0, m); } });
   save(); tourShow();
 }
@@ -81,14 +82,17 @@ function curMatch() {
     for (let m = 0; m < T.rounds[r].length; m++) { const mt = T.rounds[r][m]; if (mt.a && mt.b && !mt.w) return {r, m, mt}; }
   return null;
 }
+// true when the saved bracket was built from the other picture source and is hidden
+const tourHidden = () => !!state.tour && (state.tour.src || 'tier') !== (tcfg().src === 'own' ? 'own' : 'tier');
 function tourPick(side) {
+  if (tourHidden()) return;
   const cur = curMatch(); if (!cur) return;
   const {r, m, mt} = cur, w = side ? mt.b : mt.a, l = side ? mt.a : mt.b;
   const card = document.querySelector(`#tourStage [data-side="${side}"]`);
   card?.classList.add('pick');
   mt.w = w;
   const h = {r, m};
-  if (state.tour.elo && images.has(w) && images.has(l)) h.elo = eloMatch(w, l, 1);
+  if (state.tour.elo && imOf(w) && imOf(l)) h.elo = eloMatch(w, l, 1);
   state.tour.hist.push(h);
   advance(r, m);
   save();
@@ -98,6 +102,7 @@ function tourPick(side) {
   }, 140);
 }
 function tourUndo() {
+  if (tourHidden()) return;
   const T = state.tour, h = T?.hist.pop(); if (!h) { toast(t('t_nothing_undo')); return; }
   T.rounds[h.r][h.m].w = null;
   const nx = T.rounds[h.r + 1];
@@ -119,9 +124,11 @@ function roundName(r) {
 /* ================= rendering ================= */
 function renderTour() {
   const T = state.tour, stage = $('#tourStage');
-  if (!T) {
+  // a bracket built from the other source is not shown, so it never looks like the wrong pictures are playing
+  const otherSrc = tourHidden();
+  if (!T || otherSrc) {
     stage.innerHTML = '<div class="tour-empty"></div>';
-    stage.firstChild.textContent = t('tour_empty');
+    stage.firstChild.textContent = otherSrc ? t('tour_src_changed') : t('tour_empty');
     $('#tourBracket').replaceChildren();
     return;
   }

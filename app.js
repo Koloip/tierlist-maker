@@ -1,7 +1,8 @@
 'use strict';
 // Tier List Maker — everything runs in the browser, images are stored in IndexedDB and never uploaded.
 
-const REPO_URL = 'https://github.com/Koloip/tierlist-maker';  // shows the GitHub icon in the header; leave empty to hide it
+const REPO_URL = 'https://github.com/Koloip/tierlist-maker';  // GitHub link in the menu; leave empty to hide it
+const DONATE_URL = 'https://boosty.to/prfast/donate';      // donation link in the menu; leave empty to hide it
 
 const COLORS = ['#ff7f7f','#ffbf7f','#ffdf7f','#ffff7f','#bfff7f','#7fff7f','#7fffff','#7fbfff','#7f7fff','#ff7fff','#bf7fbf','#3b3b3b','#858585','#cfcfcf','#f7f7f7'];
 const GEAR = '<svg viewBox="0 0 24 24" width="30" height="30" fill="#fff"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.48.48 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 0 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6a3.6 3.6 0 1 1 0-7.2 3.6 3.6 0 0 1 0 7.2z"/></svg>';
@@ -11,7 +12,7 @@ const DOWN = '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke
 const $ = s => document.querySelector(s);
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
 // the look is a personal choice for the whole app, so it lives in localStorage like the language
-const THEME_KEY = 'tierlist.theme', THEMES = ['dark', 'light', 'pixel', 'neon'];
+const THEME_KEY = 'tierlist.theme', THEMES = ['dark', 'pro', 'light', 'pixel', 'neon'];
 function setTheme(name) {
   if (!THEMES.includes(name)) name = 'dark';
   document.documentElement.dataset.theme = name;
@@ -70,11 +71,12 @@ function setLang(l) {
   renderProjects(); renderAll(); updateSelBar();
   if (view === 'cmp') { renderScope(); updateStats(); }
   if (view === 'res') renderResults();
-  spinLang();
+  spinLang(); refreshSrc();
 }
 $('#lang').innerHTML = Object.entries(I18N).map(([code, d]) => `<option value="${code}">${d.lang_name}</option>`).join('');
 $('#lang').onchange = e => setLang(e.target.value);
 if (REPO_URL) { $('#ghLink').href = REPO_URL; $('#ghLink').hidden = false; }
+if (DONATE_URL) { $('#donateLink').href = DONATE_URL; $('#donateLink').hidden = false; }
 
 /* ================= storage ================= */
 // Every list ("project") has its own state in kv; images carry the id of the list they belong to.
@@ -326,6 +328,7 @@ async function finishImport(data, imgsIn, spinsIn, fallbackName, folder = null) 
     (m.items || []).forEach(it => { if (it.img) it.img = re(it.img); });
     for (const k of ['bg', 'snd']) if (m[k]) m[k] = re(m[k]);
   }
+  s.ownSet = (s.ownSet || []).map(re);
   if (s.tour) {
     s.tour.rounds.forEach(round => round.forEach(mt => { for (const k of ['a', 'b', 'w']) if (mt[k]) mt[k] = re(mt[k]); }));
     s.tour.hist.forEach(h => { if (h.elo) { h.elo.a = re(h.elo.a); h.elo.b = re(h.elo.b); } });
@@ -592,6 +595,7 @@ document.addEventListener('drop', e => {
   if (e.dataTransfer.types.includes('Files')) {
     e.preventDefault();
     if (view === 'wheel' || view === 'case') { const m = view; filesFromDT(e.dataTransfer).then(files => addSpinFiles(files, m)); return; }
+    if (['cmp', 'res', 'tour'].includes(view) && ownSource()) { filesFromDT(e.dataTransfer).then(addOwnFiles); return; }
     const box = view === 'tier' ? dropBox(e.target) : null;
     const key = box ? box.dataset.list : 'pool';
     filesFromDT(e.dataTransfer).then(files => addFiles(files, key));
@@ -837,7 +841,7 @@ function drawCover(ctx, src, sw0, sh0, x, y, w, h) {
 async function drawImages(ctx, jobs) {  // jobs: [id, x, y, w, h]
   for (let i = 0; i < jobs.length; i += 8) {
     await Promise.all(jobs.slice(i, i + 8).map(async ([id, x, y, w, h]) => {
-      try { const bm = await createImageBitmap(images.get(id).blob); drawCover(ctx, bm, bm.width, bm.height, x, y, w, h); bm.close(); } catch {}
+      try { const bm = await createImageBitmap(imOf(id).blob); drawCover(ctx, bm, bm.width, bm.height, x, y, w, h); bm.close(); } catch {}
     }));
   }
 }
@@ -931,6 +935,7 @@ function eloOf(id) { return state.elo[id] || (state.elo[id] = {r: 1500, n: 0, w:
 const K = n => n < 5 ? 48 : n < 15 ? 32 : 20;
 const pkey = (a, b) => a < b ? a + '|' + b : b + '|' + a;
 function scopeBase() {
+  if (state.cmpSrc === 'own') return ownIds();
   const ids = [];
   if (state.scope.pool !== false) ids.push(...state.pool);
   state.tiers.forEach(x => { if (state.scope[x.id] !== false) ids.push(...x.items); });
@@ -971,12 +976,12 @@ function pickPair() {
   return Math.random() < .5 ? [a, b] : [b, a];
 }
 function showPair() {
-  if (!pair || !images.has(pair[0]) || !images.has(pair[1])) pair = pickPair();
+  if (!pair || !imOf(pair[0]) || !imOf(pair[1])) pair = pickPair();
   const ok = !!pair;
   $('#arena').style.display = ok ? '' : 'none';
   $('#arenaEmpty').style.display = ok ? 'none' : 'flex';
   if (ok) document.querySelectorAll('#arena .card').forEach((c, i) => {
-    const im = images.get(pair[i]); c.querySelector('img').src = im.url; c.querySelector('.nm').textContent = im.name;
+    const im = imOf(pair[i]); c.querySelector('img').src = im.url; c.querySelector('.nm').textContent = im.name;
   });
   updateStats();
 }
@@ -1035,7 +1040,7 @@ function resIds() {
 function renderResults() {
   const {rated, un} = resIds(), g = $('#grid'), frag = document.createDocumentFragment();
   [...rated, ...un].forEach((id, i) => {
-    const im = images.get(id), e = eloOf(id), isR = i < rated.length;
+    const im = imOf(id), e = eloOf(id), isR = i < rated.length;
     const d = document.createElement('div');
     d.className = 'gitem' + (isR ? (i < 3 ? ' top' + (i + 1) : '') : ' unrated'); d.dataset.id = id;
     d.title = isR ? t('tip_rank', {name: im.name, i: i + 1, r: Math.round(e.r), w: e.w, l: e.l, d: e.d}) : t('tip_unrated', {name: im.name});
@@ -1119,7 +1124,7 @@ function placeZoom() {
   zoom.style.transform = `translate(${Math.max(8, x)}px, ${y}px)`;
 }
 function showZoom(id) {
-  const im = images.get(id); if (!im) return;
+  const im = imOf(id); if (!im) return;
   zoomId = id;
   const img = zoom.querySelector('img'); img.onload = placeZoom; img.src = im.url;
   zoom.querySelector('.zoom-name').textContent = im.name;
@@ -1146,7 +1151,7 @@ function renderCmpTop() {
   const h = document.createElement('h4'); h.textContent = t('cmp_top', {n: ids.length});
   const ol = document.createElement('ol');
   for (const id of ids) {
-    const im = images.get(id), li = document.createElement('li');
+    const im = imOf(id), li = document.createElement('li');
     li.innerHTML = '<img alt="" loading="lazy"><span></span>';
     li.querySelector('img').src = im.url; li.querySelector('span').textContent = im.name; li.title = tipOf(im);
     ol.appendChild(li);
@@ -1311,6 +1316,7 @@ addEventListener('pagehide', () => { if (state) saveNow(); });
 /* ================= init ================= */
 spinSetup();
 tourSetup();
+ownSetup();
 setLang(detectLang());
 (async () => {
   try { db = await openDB(); }
@@ -1332,6 +1338,7 @@ setLang(detectLang());
   state.history ||= [];
   reconcile();
   await spinLoad();
+  state.ownSet = ownIds(); state.cmpSrc ||= 'tier'; tcfg().src ||= 'tier';
   renderProjects(); updateUndoBtns(); remindBackup();
-  applySettings(); renderAll(); setView(state.view || 'tier');
+  applySettings(); renderAll(); setView(state.view || 'tier'); refreshSrc();
 })();

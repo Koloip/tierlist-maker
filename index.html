@@ -29,6 +29,7 @@
         <label class="menu-row"><span data-i18n="theme"></span>
           <select id="theme">
         <option value="dark" data-i18n="theme_dark"></option>
+            <option value="pro" data-i18n="theme_pro"></option>
         <option value="light" data-i18n="theme_light"></option>
         <option value="pixel" data-i18n="theme_pixel"></option>
         <option value="neon" data-i18n="theme_neon"></option>
@@ -38,12 +39,15 @@
         <hr>
         <button data-act="help" data-i18n="help_title"></button>
         <a class="menu-link" id="ghLink" target="_blank" rel="noopener" hidden>GitHub</a>
+        <a class="menu-link" id="donateLink" target="_blank" rel="noopener" hidden data-i18n="donate"></a>
         <hr id="installSep">
         <button data-act="install" id="installItem" data-i18n="install" hidden></button>
       </div>
     </div>
     <select id="project"></select>
     <input type="file" id="fImport" accept=".json,application/json" hidden>
+    <input type="file" id="fOwnFiles" multiple accept="image/*" hidden>
+    <input type="file" id="fOwnDir" webkitdirectory multiple hidden>
   </div>
   <div class="tabs">
     <button class="tab" data-view="tier" data-i18n="tab_tier"></button>
@@ -116,8 +120,17 @@
 <!-- ============ COMPARE ============ -->
 <section class="view" id="view-cmp">
   <div class="bar">
-    <span class="muted" data-i18n="cmp_in"></span>
-    <div class="scope" id="scope"></div>
+    <label><span data-i18n="src_lbl"></span>
+      <select class="src-sel" id="cmpSrc"><option value="tier" data-i18n="src_tier"></option><option value="own" data-i18n="src_own"></option></select>
+    </label>
+    <span class="tier-src muted" data-i18n="cmp_in"></span>
+    <div class="scope tier-src" id="scope"></div>
+    <span class="own-ctrl">
+      <span class="muted own-count"></span>
+      <button class="btn primary own-files" data-i18n="add_files"></button>
+      <button class="btn primary own-dir" data-i18n="add_folder"></button>
+      <button class="btn danger own-clear" data-i18n="own_clear"></button>
+    </span>
     <label><span data-i18n="top_only"></span> <input type="number" id="topN" min="0" step="5" style="width:70px"> <span class="muted" data-i18n="top_hint"></span></label>
     <span class="spacer"></span>
     <button class="btn" id="undoBtn" data-i18n="undo"></button>
@@ -158,8 +171,17 @@
 <!-- ============ TOURNAMENT ============ -->
 <section class="view" id="view-tour">
   <div class="bar">
-    <span class="muted" data-i18n="cmp_in"></span>
-    <div class="scope" id="tourScope"></div>
+    <label><span data-i18n="src_lbl"></span>
+      <select class="src-sel" id="tourSrc"><option value="tier" data-i18n="src_tier"></option><option value="own" data-i18n="src_own"></option></select>
+    </label>
+    <span class="tier-src muted" data-i18n="cmp_in"></span>
+    <div class="scope tier-src" id="tourScope"></div>
+    <span class="own-ctrl">
+      <span class="muted own-count"></span>
+      <button class="btn primary own-files" data-i18n="add_files"></button>
+      <button class="btn primary own-dir" data-i18n="add_folder"></button>
+      <button class="btn danger own-clear" data-i18n="own_clear"></button>
+    </span>
     <label><span data-i18n="tour_size"></span> <select id="tourSize"></select></label>
     <label><span data-i18n="tour_seed"></span>
       <select id="tourSeed"><option value="rating" data-i18n="tour_seed_rating"></option><option value="rand" data-i18n="tour_seed_rand"></option></select>
@@ -275,6 +297,7 @@
 <script src="spin.js"></script>
 <script src="tour.js"></script>
 <script src="folder.js"></script>
+<script src="own.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

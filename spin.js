@@ -208,7 +208,7 @@ function spinShow(v) {
 
 // images no item refers to any more are removed from the database
 async function gcSpinImages() {
-  const used = new Set([...MODES.flatMap(m => cfg(m).items.map(it => it.img)), cfg('case').bg, cfg('case').snd].filter(Boolean));
+  const used = new Set([...MODES.flatMap(m => cfg(m).items.map(it => it.img)), cfg('case').bg, cfg('case').snd, ...(state.ownSet || [])].filter(Boolean));
   const dead = [...simgs.keys()].filter(id => !used.has(id));
   if (!dead.length) return;
   dead.forEach(id => { URL.revokeObjectURL(simgs.get(id).url); simgs.delete(id); thumbs.delete(id); });

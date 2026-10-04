@@ -519,3 +519,71 @@ header{flex-wrap:nowrap}
 .st-check{display:flex;align-items:flex-start;gap:8px;margin-top:8px;cursor:pointer}
 
 .st-hint{font-size:13px;margin:0 0 12px!important;max-width:620px}
+
+/* ---------- own set in Compare / Tournament ---------- */
+.own-ctrl{display:none;align-items:center;gap:6px}
+.src-own .own-ctrl{display:flex}
+.src-own .tier-src{display:none}
+#autoTier:disabled{opacity:.4;cursor:default}
+
+/* ---------- pro: quiet graphite, thin borders, one accent ---------- */
+html[data-theme=pro]{--bg:#111214;--panel:#17181b;--text:#e4e5e7;--muted:#8b8e95;--accent:#5b8def;--tier-bg:#151619;--line:#26282d;--hover:#1f2125}
+[data-theme=pro] body{font-family:"Segoe UI Variable Text","Segoe UI","Inter",system-ui,sans-serif;font-size:13px;letter-spacing:.005em}
+[data-theme=pro] header{padding:6px 12px;border-bottom:1px solid var(--line);gap:8px}
+[data-theme=pro] .bar,[data-theme=pro] .pool-head{border-color:var(--line);padding-top:7px;padding-bottom:7px}
+[data-theme=pro] .btn{background:transparent;border:1px solid var(--line);border-radius:6px;padding:5px 11px;color:var(--text);font-size:13px;font-weight:500}
+[data-theme=pro] .btn:hover{background:var(--hover);border-color:#33363c}
+[data-theme=pro] .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+[data-theme=pro] .btn.primary:hover{background:#6c99f2}
+[data-theme=pro] .btn.danger{color:#e5787b}
+[data-theme=pro] .btn.danger:hover{background:rgba(229,120,123,.12);border-color:rgba(229,120,123,.4);color:#ef8f92}
+[data-theme=pro] .tab{font-weight:500;font-size:13px;padding:6px 10px;border-radius:6px;color:var(--muted)}
+[data-theme=pro] .tab:hover{color:var(--text);background:var(--hover)}
+[data-theme=pro] .tab.active{background:transparent;color:var(--text);box-shadow:inset 0 -2px 0 var(--accent);border-radius:0}
+[data-theme=pro] input[type=text],[data-theme=pro] input[type=number],[data-theme=pro] select,[data-theme=pro] .card-note{background:#0e0f11;border:1px solid var(--line);border-radius:6px;color:var(--text);font-size:13px}
+[data-theme=pro] input:focus,[data-theme=pro] select:focus,[data-theme=pro] textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(91,141,239,.18)}
+[data-theme=pro] .tiers-scroll{padding:16px 18px}
+[data-theme=pro] #tiers{background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden;gap:1px}
+[data-theme=pro] .label{font-weight:600;font-size:clamp(13px,calc(var(--h)*.15),24px)}
+[data-theme=pro] .ctrl{background:var(--panel);width:72px}
+[data-theme=pro] .ctrl svg{opacity:.55}
+[data-theme=pro] .ctrl button:hover svg{opacity:1}
+[data-theme=pro] .item{background:#0e0f11}
+[data-theme=pro] .item.sel{outline:2px solid var(--accent);outline-offset:-2px}
+[data-theme=pro] .item.sel::after{background:rgba(91,141,239,.14)}
+[data-theme=pro] .splitter{background:var(--line);height:5px}
+[data-theme=pro] .splitter::after{background:#3a3d44;top:1px}
+[data-theme=pro] .pool-head h3{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+[data-theme=pro] .hint{font-size:12px}
+[data-theme=pro] .empty{border:1px dashed #33363c;border-radius:8px}
+[data-theme=pro] .menu,[data-theme=pro] .dlg,[data-theme=pro] #selBar,[data-theme=pro] #zoom{background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.45)}
+[data-theme=pro] .menu button,[data-theme=pro] .menu-link{font-size:13px;border-radius:6px}
+[data-theme=pro] .menu button:hover,[data-theme=pro] .menu-link:hover{background:var(--hover)}
+[data-theme=pro] .menu hr{border-color:var(--line)}
+[data-theme=pro] .dlg h3{font-size:15px;font-weight:600}
+[data-theme=pro] .chip{background:transparent;border:1px solid var(--line);border-radius:6px}
+[data-theme=pro] .chip:hover{background:var(--hover)}
+[data-theme=pro] .stats{color:var(--muted);font-size:12px}
+[data-theme=pro] .pbar{height:4px;background:var(--line)}
+[data-theme=pro] #pfill{background:var(--accent)}
+[data-theme=pro] .card{border-radius:10px}
+[data-theme=pro] .card:hover{background:var(--hover)}
+[data-theme=pro] .card img{border-radius:6px;box-shadow:0 6px 24px rgba(0,0,0,.4)}
+[data-theme=pro] .card .nm{font-size:15px;font-weight:600}
+[data-theme=pro] .vs{font-size:14px;font-weight:600;letter-spacing:.2em;color:#4a4d54}
+[data-theme=pro] .cmp-top,[data-theme=pro] .tour-bracket{background:var(--panel);border-color:var(--line)}
+[data-theme=pro] .cmp-top h4,[data-theme=pro] .bhead{color:var(--muted);font-weight:600}
+[data-theme=pro] .bm{background:#121316;border:1px solid var(--line);border-radius:6px}
+[data-theme=pro] .bm.cur{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+[data-theme=pro] .bp+.bp{border-color:var(--line)}
+[data-theme=pro] .bp.bwin{background:rgba(91,141,239,.12)}
+[data-theme=pro] .spin-side{background:var(--panel);border-color:var(--line)}
+[data-theme=pro] .srow:hover{background:var(--hover)}
+[data-theme=pro] .gitem{border-radius:4px;overflow:hidden}
+[data-theme=pro] .rank{border-radius:4px;font-weight:600}
+[data-theme=pro] #toast{background:#1f2125;border:1px solid var(--line);border-radius:8px;font-size:13px}
+[data-theme=pro] .champ-title{color:var(--text);text-shadow:none;font-size:22px;font-weight:600}
+[data-theme=pro] .champ img{box-shadow:0 0 0 2px var(--accent),0 16px 40px rgba(0,0,0,.5)}
+[data-theme=pro] .tour-round b{font-size:16px;font-weight:600}
+
+#donateLink::before{content:"\2665";color:#e5787b;margin-right:7px}
