@@ -703,3 +703,54 @@ textarea.share-link{background:var(--bg);color:var(--text);border:1px solid var(
 .cg-person{display:flex;align-items:center;gap:10px;padding:6px 6px 6px 12px;border-radius:8px;background:var(--hover,rgba(127,127,127,.14))}
 .cg-person b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .steam-drop{margin-left:0;margin-right:0}
+
+/* ---------- first screen of an empty list ---------- */
+body.no-images .pool-panel{height:max(var(--pool-h),420px)}
+.welcome{width:100%;max-width:1000px;margin:12px auto;padding:20px 22px;border:2px dashed var(--line,rgba(127,127,127,.35));border-radius:14px;text-align:center}
+.welcome h3{margin:0 0 16px;font-size:21px}
+.wl-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:10px}
+.wl-tile{display:flex;flex-direction:column;gap:5px;align-items:flex-start;text-align:left;padding:15px 16px;border-radius:11px;border:1px solid var(--line,rgba(127,127,127,.3));background:var(--bg);color:var(--text);cursor:pointer;font:inherit;transition:border-color .12s,transform .08s}
+.wl-tile:hover{border-color:var(--accent)}
+.wl-tile:active{transform:scale(.98)}
+.wl-tile b{font-size:16px}
+.wl-tile span{font-size:13px;color:var(--muted);line-height:1.35}
+.wl-tile.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.wl-tile.primary span{color:rgba(255,255,255,.82)}
+.welcome>p{margin:14px 0 0;font-size:13px}
+[data-theme=pixel] .wl-tile{border:2px solid var(--ink);box-shadow:3px 3px 0 var(--ink);border-radius:0}
+[data-theme=pixel] .welcome{border-radius:0}
+[data-theme=neon] .wl-tile.primary{box-shadow:0 0 14px rgba(255,42,109,.45)}
+
+/* ---------- the ⋯ menu above Unranked ---------- */
+.menu .menu-danger{color:#e5787b}
+
+/* ---------- presentation controls and the stream view ---------- */
+#presentCtl{display:none;position:fixed;top:10px;right:14px;z-index:40;gap:8px;opacity:.55;transition:opacity .15s}
+#presentCtl:hover{opacity:1}
+body.present #presentCtl{display:flex}
+#presentCtl #exitPresent{position:static;display:block;opacity:1}
+body.present #view-cmp .bar,body.present #view-cmp .progress,body.present #view-cmp .keys,body.present #view-cmp .cmp-top,body.present #view-cmp .mid .btn,
+body.present #view-tour .bar,body.present #view-tour .keys,body.present #view-tour .tour-bracket{display:none}
+body.present .cmp-body .card img,body.present .tour-arena .card img{height:min(76vh,calc(100vh - 150px));max-width:43vw}
+body.present .card .nm{font-size:26px;max-width:43vw}
+body.present .vs{font-size:44px}
+body.present .tour-round{font-size:20px;margin-top:8px}
+body.present .champ img{max-height:calc(100vh - 230px)}
+body.present .tw-badge b{font-size:36px}
+body.present .tw-badge span{font-size:18px}
+#twLive{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:39;background:rgba(0,0,0,.82);color:#fff;font-size:20px;font-weight:600;padding:10px 24px;border-radius:999px;box-shadow:0 0 0 2px #9146ff;white-space:nowrap;pointer-events:none}
+#twLive[hidden]{display:none}
+/* a flat green background that OBS can key out (Filters → Chroma Key) */
+body.chroma,body.chroma .view,body.chroma .tiers-scroll{background:#00b140!important}
+body.chroma .card:hover{background:transparent}
+#greenBtn{display:inline-block}
+body.chroma #greenBtn{box-shadow:0 0 0 2px #00b140}body.no-images .hint{display:none}
+#twLive{top:14px;bottom:auto}
+body.present #view-cmp .cmp-body,body.present #view-tour .tour-stage{padding-top:64px}
+body.present .cmp-body .card img,body.present .tour-arena .card img{height:min(74vh,calc(100vh - 200px))}
+body.present.idle #presentCtl{opacity:0;pointer-events:none}
+body.present.idle,body.present.idle *{cursor:none!important}
+/* phones: long buttons wrap instead of sticking out; Twitch and the stream view are for computers */
+.st-row .btn{white-space:normal;text-align:left;max-width:100%}
+.touch .tw-btn,.touch .stream-btn{display:none}
+@media (max-width:600px){ .welcome{padding:14px 12px} .welcome h3{font-size:18px;margin-bottom:12px} .wl-grid{grid-template-columns:1fr 1fr;gap:8px} .wl-tile{padding:11px 12px} .wl-tile b{font-size:15px} }

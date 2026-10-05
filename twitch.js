@@ -71,7 +71,8 @@ function twPaint() {
   const on = !!tw.joined;
   document.querySelectorAll('.tw-btn').forEach(b => { b.classList.toggle('on', on); b.textContent = on ? '● #' + tw.channel : t('tw_btn'); });
   document.querySelectorAll('.tw-badge').forEach(e => e.remove());
-  const cur = on && twCurrent(); if (!cur) return;
+  const live = $('#twLive');
+  const cur = on && twCurrent(); live.hidden = true; if (!cur) return;
   twSync(cur);
   const c = twCounts(), sum = c[0] + c[1];
   cur.cards.forEach((card, i) => {
@@ -81,7 +82,10 @@ function twPaint() {
     card.append(b);
   });
   const left = tw.auto ? Math.max(0, Math.ceil((tw.until - Date.now()) / 1000)) : null;
-  document.querySelectorAll('.tw-btn').forEach(b => b.textContent = '● #' + tw.channel + ' · ' + t('tw_votes', {n: sum}) + (left != null ? ' · ' + left + ' ' + t('tw_sec') : ''));
+  const tail = ' · ' + t('tw_votes', {n: sum}) + (left != null ? ' · ' + left + ' ' + t('tw_sec') : '');
+  document.querySelectorAll('.tw-btn').forEach(b => b.textContent = '● #' + tw.channel + tail);
+  // in the stream view the viewers see what to do
+  if (document.body.classList.contains('present')) { live.textContent = t('tw_live') + tail; live.hidden = false; }
 }
 // automatic decision: when the time is up and there are votes; no votes or a tie in the tournament waits longer
 setInterval(() => {

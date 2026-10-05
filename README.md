@@ -23,6 +23,7 @@ Site: https://koloip.github.io/tierlist-maker/
 - Steam import: every game you have launched, with covers, hours and the last launch date. Right on the site, nothing to download.
 - Share a Steam list by link: the link holds only the rows and game numbers, the covers come from Steam. Nothing is uploaded.
 - Common games with friends: everyone sends a short link with the games they have launched, and the app makes a tier list of only the games all of you have played.
+- Stream view for Compare and Tournament: big cards without buttons, a line telling viewers what to write, an optional green background for OBS.
 - Twitch chat voting in Compare and Tournament: viewers write 1 or 2, the counts show on the cards, the majority can decide automatically.
 - Group tier list: friends send their saved lists, the app averages them into one and shows whose taste is closest and what you argued about.
 - Statistics (Results → Statistics): how the rows are filled, hours per row, the comparison leaders and where Compare disagrees with your rows.
@@ -132,6 +133,7 @@ If it saved you some time and you feel like it, you can support me on [Boosty](h
 - Импорт из Steam: все игры, которые ты запускал, с обложками, часами и датой последнего запуска. Прямо на сайте, ничего не нужно скачивать.
 - Ссылка на Steam-список: в ней только ряды и номера игр, обложки берутся из Steam. Никуда ничего не загружается.
 - Общие игры с друзьями: каждый кидает короткую ссылку со своими запущенными играми, и получается тир-лист только из игр, в которые играли все.
+- Вид для стрима в сравнении и турнире: крупные карточки без кнопок, строка для зрителей, что писать в чат, и зелёный фон для OBS по желанию.
 - Голосование чата Twitch в сравнении и турнире: зрители пишут 1 или 2, счёт виден на карточках, большинство может решать автоматически.
 - Общий тир-лист: друзья присылают свои списки, приложение собирает из них средний и показывает, чей вкус ближе и о чём больше всего спорили.
 - Статистика (Результаты → Статистика): заполненность рядов, часы по рядам, лидеры сравнения и где сравнение не согласно с рядами.

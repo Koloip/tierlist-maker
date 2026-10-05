@@ -499,15 +499,32 @@ function renderTiers() {
 function renderPool() {
   const p = $('#pool');
   p.replaceChildren(...state.pool.map(el));
-  if (!images.size) {
-    const e = document.createElement('div'); e.className = 'empty';
-    e.innerHTML = t('empty');
-    p.appendChild(e);
-  }
+  if (!images.size) p.appendChild(welcomeEl());
+  document.body.classList.toggle('no-images', !images.size);
   applyFilter();
   const steam = hasSteam();
   document.querySelectorAll('.steam-opt').forEach(o => o.hidden = !steam);
   $('#shareBtn').hidden = !steam;
+}
+// an empty list shows the ways to get pictures in, big enough that nobody misses them
+function welcomeEl() {
+  const w = document.createElement('div'); w.className = 'welcome';
+  const h = document.createElement('h3'); h.textContent = t('wl_title');
+  const grid = document.createElement('div'); grid.className = 'wl-grid';
+  const tile = (title, sub, fn, primary) => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'wl-tile' + (primary ? ' primary' : '');
+    const s = document.createElement('b'); s.textContent = title;
+    const d = document.createElement('span'); d.textContent = sub;
+    b.append(s, d); b.onclick = fn; grid.append(b);
+  };
+  tile(t('wl_files'), t('wl_files_d'), () => $('#fFiles').click(), true);
+  tile(t('wl_dir'), t('wl_dir_d'), () => $('#fDir').click(), true);
+  tile(t('st_imp_btn'), t('wl_steam_d'), () => openSteamImport());
+  tile(t('cg_title'), t('wl_common_d'), () => openCommonGames());
+  tile(t('wl_open'), t('wl_open_d'), () => $('#fImport').click());
+  const p = document.createElement('p'); p.className = 'muted'; p.textContent = t('wl_paste');
+  w.append(h, grid, p);
+  return w;
 }
 function updateCounts() {
   $('#poolCount').textContent = state.pool.length;
@@ -813,6 +830,17 @@ $('#wipeBtn').onclick = async () => {
   state.elo = {}; state.history = []; state.lead = {}; state.cmpCount = 0;
   undoStack.length = redoStack.length = 0; updateUndoBtns(); save();
 };
+// the rarely used "reset" and "delete all" live in the ⋯ menu; it is placed on the page, so the panel can't clip it
+$('#poolMore').onclick = e => {
+  e.stopPropagation();
+  const m = $('#poolMenu'); m.hidden = !m.hidden; if (m.hidden) return;
+  const r = e.currentTarget.getBoundingClientRect();
+  m.style.position = 'fixed';
+  m.style.left = Math.max(8, Math.min(r.right - m.offsetWidth, innerWidth - m.offsetWidth - 8)) + 'px';
+  m.style.top = (r.bottom + 6 + m.offsetHeight < innerHeight - 8 ? r.bottom + 6 : r.top - m.offsetHeight - 6) + 'px';
+};
+$('#poolMenu').addEventListener('click', () => $('#poolMenu').hidden = true);
+document.addEventListener('click', e => { if (!$('#poolMenu').hidden && !e.target.closest('#poolMenu')) $('#poolMenu').hidden = true; });
 $('#resetBtn').onclick = () => {
   snap();
   state.tiers.forEach(x => { state.pool.push(...x.items); x.items = []; });
@@ -893,11 +921,23 @@ $('#splitter').onpointerdown = e => {
   sp.onpointermove = ev => { state.settings.poolH = Math.min(80, Math.max(10, (innerHeight - ev.clientY) / innerHeight * 100)); applySettings(); };
   sp.onpointerup = sp.onpointercancel = () => { sp.onpointermove = sp.onpointerup = sp.onpointercancel = null; save(); };
 };
+// Presentation hides everything but the content. In Compare and Tournament it is the stream view: big cards,
+// the Twitch votes and a line telling viewers what to write; the green background can be keyed out in OBS.
 function togglePresent(on) {
   document.body.classList.toggle('present', on); clearSel();
   if (!on && reveal) { reveal.order.forEach(id => els.get(id)?.classList.remove('unrev')); reveal = null; }
+  if (on && (view === 'cmp' || view === 'tour')) toast(t('stream_on'), 4000);
+  twPaint();
 }
 $('#presentBtn').onclick = () => togglePresent(true);
+document.querySelectorAll('.stream-btn').forEach(b => b.onclick = () => togglePresent(true));
+$('#greenBtn').onclick = () => document.body.classList.toggle('chroma');
+// on a stream the corner buttons and the cursor shouldn't stay in the picture: they fade out when the mouse rests
+let idleTimer = 0;
+document.addEventListener('mousemove', () => {
+  document.body.classList.remove('idle'); clearTimeout(idleTimer);
+  idleTimer = setTimeout(() => document.body.classList.contains('present') && document.body.classList.add('idle'), 2500);
+}, {passive: true});
 
 // reveal: a presentation where the images appear one by one, from the bottom row up to the top — made for streams
 let reveal = null;
@@ -1393,6 +1433,8 @@ document.addEventListener('keydown', e => {
   if (spinKey(e)) return;
   if (e.target.matches('input, textarea, select')) return;
   if (e.key === '?' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); showHelp(); return; }
+  // Esc leaves the presentation (and the stream view of Compare and Tournament) from anywhere
+  if (e.key === 'Escape' && document.body.classList.contains('present')) { e.preventDefault(); togglePresent(false); return; }
   if (view === 'tier' && (e.ctrlKey || e.metaKey) && !e.altKey) {
     if (e.code === 'KeyZ') { e.preventDefault(); e.shiftKey ? redoTier() : undoTier(); }
     else if (e.code === 'KeyA') { e.preventDefault(); state.pool.filter(id => el(id).style.display !== 'none').forEach(id => setSel(id, true)); }

@@ -117,8 +117,13 @@
       <button class="btn primary" id="addFilesBtn" data-i18n="add_files"></button>
       <button class="btn primary" id="addDirBtn" data-i18n="add_folder"></button>
       <button class="btn" id="steamBtn" data-i18n="st_imp_btn"></button>
-      <button class="btn" id="resetBtn" data-i18n="reset"></button>
-      <button class="btn danger" id="wipeBtn" data-i18n="wipe"></button>
+      <div class="menu-wrap">
+        <button class="btn icon-btn" id="poolMore" data-i18n-title="more">⋯</button>
+        <div class="menu pool-menu" id="poolMenu" hidden>
+          <button id="resetBtn" data-i18n="reset_all"></button>
+          <button id="wipeBtn" class="menu-danger" data-i18n="wipe"></button>
+        </div>
+      </div>
       <input type="file" id="fFiles" multiple accept="image/*" hidden>
       <input type="file" id="fDir" webkitdirectory multiple hidden>
     </div>
@@ -143,6 +148,7 @@
     </span>
     <label><span data-i18n="top_only"></span> <input type="number" id="topN" min="0" step="5" style="width:70px"> <span class="muted" data-i18n="top_hint"></span></label>
     <span class="spacer"></span>
+    <button class="btn stream-btn" data-i18n="stream_btn" data-i18n-title="stream_tip"></button>
     <button class="btn tw-btn" data-i18n="tw_btn"></button>
     <button class="btn" id="undoBtn" data-i18n="undo"></button>
     <button class="btn danger" id="resetElo" data-i18n="reset_elo"></button>
@@ -205,6 +211,7 @@
     </label>
     <label><input type="checkbox" id="tourElo"> <span data-i18n="tour_elo"></span></label>
     <span class="spacer"></span>
+    <button class="btn stream-btn" data-i18n="stream_btn" data-i18n-title="stream_tip"></button>
     <button class="btn tw-btn" data-i18n="tw_btn"></button>
     <button class="btn" id="tourUndo" data-i18n="undo"></button>
     <button class="btn primary" id="tourStart" data-i18n="tour_start"></button>
@@ -262,7 +269,11 @@
   <aside class="spin-side"></aside>
 </section>
 
-<button class="btn" id="exitPresent" data-i18n="exit_present"></button>
+<div id="presentCtl">
+  <button class="btn" id="greenBtn" data-i18n="green_bg" data-i18n-title="green_tip"></button>
+  <button class="btn" id="exitPresent" data-i18n="exit_present"></button>
+</div>
+<div id="twLive" hidden></div>
 
 <div id="selBar" hidden>
   <span id="selCount"></span>
