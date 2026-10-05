@@ -71,7 +71,7 @@ function setLang(l) {
   renderProjects(); renderAll(); updateSelBar();
   if (view === 'cmp') { renderScope(); updateStats(); }
   if (view === 'res') renderResults();
-  spinLang(); refreshSrc();
+  spinLang(); refreshSrc(); twPaint();
 }
 $('#lang').innerHTML = Object.entries(I18N).map(([code, d]) => `<option value="${code}">${d.lang_name}</option>`).join('');
 $('#lang').onchange = e => setLang(e.target.value);
@@ -83,12 +83,13 @@ if (DONATE_URL) { $('#donateLink').href = DONATE_URL; $('#donateLink').hidden = 
 // The first list is 'default' and keeps the original key 'state', so data from older versions just works.
 function openDB() {
   return new Promise((res, rej) => {
-    const r = indexedDB.open('tierlist-maker', 2);
+    const r = indexedDB.open('tierlist-maker', 3);
     r.onupgradeneeded = () => {
       const d = r.result, has = n => d.objectStoreNames.contains(n);
       if (!has('images')) d.createObjectStore('images', {keyPath: 'id'});
       if (!has('kv')) d.createObjectStore('kv');
       if (!has('spin')) d.createObjectStore('spin', {keyPath: 'id'});  // wheel / case images
+      if (!has('thumbs')) d.createObjectStore('thumbs', {keyPath: 'id'});  // small copies for the tiles
     };
     r.onsuccess = () => res(r.result);
     r.onerror = () => rej(r.error);
@@ -163,7 +164,7 @@ function makeEl(id) {
   const im = images.get(id);
   const d = document.createElement('div');
   d.className = 'item'; d.draggable = !TOUCH; d.dataset.id = id; d.title = tipOf(im);
-  const img = new Image(); img.src = im.url; img.alt = ''; img.draggable = false; img.decoding = 'async';
+  const img = new Image(); img.loading = 'lazy'; img.src = im.turl || im.url; img.alt = ''; img.draggable = false; img.decoding = 'async';
   const cap = document.createElement('div'); cap.className = 'cap'; cap.textContent = im.name;
   d.append(img, cap);
   return d;
@@ -176,6 +177,78 @@ function download(blob, name) {
   setTimeout(() => URL.revokeObjectURL(a.href), 10000);
 }
 const fileSafe = s => (s || 'tierlist').replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 80) || 'tierlist';
+// what goes into the database: the in-memory record without its object URLs and the small copy
+const recOf = ({url, turl, tblob, ...r}) => r;
+
+/* ================= thumbnails ================= */
+// Tiles are small, so they show a downscaled copy: decoding hundreds of full-size pictures is what makes big lists slow.
+// The copies live in the 'thumbs' store (not for folder-only lists) and are made in the background for older pictures.
+const THUMB = 360;  // px on the shorter side
+const srcOf = id => { const im = imOf(id); return im ? im.turl || im.url : ''; };
+const thumbQueue = new Set();
+let thumbBusy = false;
+async function makeThumb(blob) {
+  const bm = await createImageBitmap(blob);
+  const k = THUMB / Math.min(bm.width, bm.height);
+  if (k > .75) { bm.close(); return null; }  // small enough as it is
+  const cv = document.createElement('canvas');
+  cv.width = Math.round(bm.width * k); cv.height = Math.round(bm.height * k);
+  const ctx = cv.getContext('2d'); ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(bm, 0, 0, cv.width, cv.height); bm.close();
+  const out = await new Promise(r => cv.toBlob(r, 'image/webp', .85));
+  return out && out.size < blob.size ? out : null;
+}
+function setThumb(id, blob) {
+  const im = imOf(id); if (!im || !blob) return;
+  if (im.turl) URL.revokeObjectURL(im.turl);
+  im.tblob = blob; im.turl = URL.createObjectURL(blob);
+  const img = els.get(id)?.querySelector('img'); if (img) img.src = im.turl;
+}
+function queueThumbs(ids) { ids.forEach(id => thumbQueue.add(id)); if (!thumbBusy) runThumbs(); }
+async function runThumbs() {
+  thumbBusy = true;
+  let batch = [];
+  const flush = async () => {
+    const b = batch; batch = [];
+    if (b.length && keepBlobs()) await tx('thumbs', 'readwrite', s => b.forEach(r => s.put(r))).catch(() => {});
+  };
+  for (const id of thumbQueue) {
+    thumbQueue.delete(id);
+    const im = imOf(id);
+    if (!im?.blob || im.turl || im.blob.type === 'image/gif') continue;  // a GIF would lose its animation
+    let blob = null;
+    try { blob = await makeThumb(im.blob); } catch {}
+    setThumb(id, blob);
+    batch.push({id, project, blob});  // blob null: no copy needed, don't try again
+    if (batch.length >= 25) await flush();
+  }
+  await flush();
+  thumbBusy = false;
+}
+async function loadThumbs() {
+  const done = new Set();
+  for (const r of await tx('thumbs', 'readonly', s => s.getAll()).catch(() => [])) {
+    if (projOf(r) !== project) continue;
+    done.add(r.id); setThumb(r.id, r.blob);
+  }
+  queueThumbs([...images.keys(), ...simgs.keys()].filter(id => !done.has(id)));
+}
+function dropThumbs(ids) {
+  ids.forEach(id => { const im = imOf(id); if (im?.turl) URL.revokeObjectURL(im.turl); });
+  return tx('thumbs', 'readwrite', s => ids.forEach(id => s.delete(id))).catch(() => {});
+}
+
+/* ================= Steam games ================= */
+// pictures made by tools/steam-import.ps1 carry steam: {appid, min (minutes played), last (unix time of the last launch)}
+const fmtHours = min => new Intl.NumberFormat(lang, {maximumFractionDigits: min < 600 ? 1 : 0}).format(min / 60);
+function playInfo(im) {
+  const s = im?.steam; if (!s) return '';
+  const out = [];
+  if (s.min) out.push(t('play_h', {h: fmtHours(s.min)}));
+  if (s.last) out.push(t('play_last', {d: new Date(s.last * 1000).toLocaleDateString(lang)}));
+  return out.join(' · ');
+}
+const hasSteam = () => { for (const im of images.values()) if (im.steam) return true; return false; };
 
 /* ================= dialogs & menu ================= */
 let dlgOk = null, dlgCancel = null;
@@ -225,7 +298,7 @@ document.addEventListener('click', e => { if (!$('#viewMenu').hidden && !e.targe
 menu.onclick = e => {
   const act = e.target.closest('[data-act]')?.dataset.act; if (!act) return;
   menu.hidden = true;
-  ({newProj, renameProj, deleteProj, exportProj, importProj: () => $('#fImport').click(), install: installApp, help: showHelp, storage: openStorage})[act]?.();
+  ({newProj, renameProj, deleteProj, exportProj, importProj: () => $('#fImport').click(), install: installApp, help: showHelp, storage: openStorage, group: openGroup, common: () => openCommonGames()})[act]?.();
 };
 
 /* ================= lists (projects) ================= */
@@ -269,7 +342,7 @@ async function deleteProj() {
   const p = meta.projects.find(x => x.id === project);
   if (!await ask(t('c_proj_delete', {name: projName(p)}), t('sel_del'))) return;
   clearTimeout(saveTimer);
-  for (const store of ['images', 'spin']) {
+  for (const store of ['images', 'spin', 'thumbs']) {
     const ids = (await tx(store, 'readonly', s => s.getAll())).filter(r => projOf(r) === project).map(r => r.id);
     await tx(store, 'readwrite', s => ids.forEach(id => s.delete(id)));
   }
@@ -296,7 +369,7 @@ async function exportProj() {
   await saveNow();
   const pack = async map => {
     const out = [];
-    for (const im of map.values()) out.push({id: im.id, name: im.name, note: im.note || '', key: im.key, type: im.blob.type, data: await blobToB64(im.blob)});
+    for (const im of map.values()) out.push({id: im.id, name: im.name, note: im.note || '', key: im.key, steam: im.steam, type: im.blob.type, data: await blobToB64(im.blob)});
     return out;
   };
   const p = meta.projects.find(x => x.id === project);
@@ -317,13 +390,18 @@ async function importProj(file) {
 // shared by files and folders: stores the pictures and the state as a new list and switches to it
 async function finishImport(data, imgsIn, spinsIn, fallbackName, folder = null) {
   const id = uid(), map = new Map(), re = x => map.get(x) ?? x;
-  const recs = list => list.map(r => { const nid = uid(); map.set(r.id, nid); return {id: nid, project: id, name: r.name, note: r.note || '', key: r.key, blob: r.blob}; });
+  const recs = list => list.map(r => {
+    const nid = uid(); map.set(r.id, nid);
+    return {id: nid, project: id, name: r.name, note: r.note || '', key: r.key, ...(r.steam && {steam: r.steam}), blob: r.blob};
+  });
   const imgs = recs(imgsIn), spins = recs(spinsIn);
-  const s = data.state;
+  const s = data.state, reKeys = o => o && Object.fromEntries(Object.entries(o).map(([k, v]) => [re(k), v]));
   s.tiers = (s.tiers || []).map(x => ({...x, items: (x.items || []).map(re)}));
   s.pool = (s.pool || []).map(re);
-  s.elo = Object.fromEntries(Object.entries(s.elo || {}).map(([k, v]) => [re(k), v]));
-  s.history = (s.history || []).map(h => ({...h, a: re(h.a), b: re(h.b)}));
+  s.elo = reKeys(s.elo || {});
+  s.lead = reKeys(s.lead);
+  if (s.group) { s.group.votes = reKeys(s.group.votes); s.group.labels = reKeys(s.group.labels); }
+  s.history = (s.history || []).map(h => ({...h, a: re(h.a), b: re(h.b), ...(h.lead && {lead: re(h.lead)})}));
   if (s.spin) for (const m of Object.values(s.spin)) {
     (m.items || []).forEach(it => { if (it.img) it.img = re(it.img); });
     for (const k of ['bg', 'snd']) if (m[k]) m[k] = re(m[k]);
@@ -339,7 +417,7 @@ async function finishImport(data, imgsIn, spinsIn, fallbackName, folder = null) 
   const base = String(data.name || fallbackName).slice(0, 80), taken = new Set(meta.projects.map(projName));
   let name = base;
   for (let k = 2; taken.has(name); k++) name = `${base} (${k})`;
-  const p = {id, name};
+  const p = {id, name, backupAt: Date.now()};  // it came from a file, a link or Steam, so no backup reminder yet
   meta.projects.push(p);
   if (folder) { await tx('kv', 'readwrite', st => st.put(folder, dirKey(id))); p.dir = folder.name; }
   toast(t('t_imported'));
@@ -421,6 +499,9 @@ function renderPool() {
     p.appendChild(e);
   }
   applyFilter();
+  const steam = hasSteam();
+  document.querySelectorAll('.steam-opt').forEach(o => o.hidden = !steam);
+  $('#shareBtn').hidden = !steam;
 }
 function updateCounts() {
   $('#poolCount').textContent = state.pool.length;
@@ -431,11 +512,15 @@ function updateCounts() {
 }
 function renderAll() { renderTiers(); renderPool(); updateCounts(); updateSelBar(); }
 // in Unranked the non-matching images are hidden; in the rows they are dimmed so the layout stays readable
-function applyFilter() {
-  const q = $('#search').value.trim().toLowerCase(), hit = id => !q || (images.get(id).name + ' ' + (images.get(id).note || '')).toLowerCase().includes(q);
-  for (const id of state.pool) el(id).style.display = hit(id) ? '' : 'none';
-  for (const x of state.tiers) for (const id of x.items) el(id).classList.toggle('dim', !hit(id));
+function filterTiles(ids) {
+  const q = $('#search').value.trim().toLowerCase();
+  for (const id of ids) {
+    const e = el(id), im = images.get(id), hit = !q || (im.name + ' ' + (im.note || '')).toLowerCase().includes(q), inPool = e.parentNode?.id === 'pool';
+    e.style.display = inPool && !hit ? 'none' : '';
+    e.classList.toggle('dim', !inPool && !hit);
+  }
 }
+function applyFilter() { filterTiles(state.pool); for (const x of state.tiers) filterTiles(x.items); }
 $('#search').oninput = applyFilter;
 
 function syncFromDom() {
@@ -453,7 +538,10 @@ function moveTo(ids, key) {
   snap();
   removeEverywhere(ids);
   listOf(key).push(...ids);
-  clearSel(); renderAll(); refreshHover(); save();
+  // moving just these tiles is far cheaper than rebuilding every row of a big list
+  const box = key === 'pool' ? $('#pool') : document.querySelector(`.items[data-list="${key}"]`);
+  ids.forEach(id => box.appendChild(el(id)));
+  filterTiles(ids); clearSel(); updateCounts(); refreshHover(); save();
 }
 
 /* ================= selection ================= */
@@ -693,12 +781,14 @@ async function addFiles(files, key = 'pool') {
   listOf(key).push(...recs.map(r => r.id));
   renderAll(); save();
   toast(t('t_added', {n: recs.length}));
+  queueThumbs(recs.map(r => r.id));
 }
 async function deleteImages(ids) {
   removeEverywhere(ids);
   const s = new Set(ids);
   state.history = state.history.filter(h => !s.has(h.a) && !s.has(h.b));
   spinForget(ids);
+  dropThumbs(ids);
   ids.forEach(id => {
     delete state.elo[id];
     const im = images.get(id); if (im) URL.revokeObjectURL(im.url);
@@ -714,7 +804,7 @@ $('#fDir').onchange = e => { addFiles([...e.target.files]); e.target.value = '';
 $('#wipeBtn').onclick = async () => {
   if (!images.size || !await ask(t('c_wipe', {n: images.size}), t('sel_del'))) return;
   await deleteImages([...images.keys()]);
-  state.elo = {}; state.history = []; state.cmpCount = 0;
+  state.elo = {}; state.history = []; state.lead = {}; state.cmpCount = 0;
   undoStack.length = redoStack.length = 0; updateUndoBtns(); save();
 };
 $('#resetBtn').onclick = () => {
@@ -728,6 +818,8 @@ const SORTS = {
   rating: (a, b) => (state.elo[b]?.n ? state.elo[b].r : -1e9) - (state.elo[a]?.n ? state.elo[a].r : -1e9) || SORTS.name(a, b),
   new: (a, b) => (a < b ? 1 : a > b ? -1 : 0),
   old: (a, b) => (a < b ? -1 : a > b ? 1 : 0),
+  played: (a, b) => (images.get(b).steam?.min || 0) - (images.get(a).steam?.min || 0) || SORTS.name(a, b),
+  recent: (a, b) => (images.get(b).steam?.last || 0) - (images.get(a).steam?.last || 0) || SORTS.name(a, b),
 };
 $('#sortSel').onchange = e => {
   const how = e.target.value; e.target.value = '';
@@ -839,9 +931,12 @@ function drawCover(ctx, src, sw0, sh0, x, y, w, h) {
   ctx.drawImage(src, sx, sy, sw, sh, x, y, w, h);
 }
 async function drawImages(ctx, jobs) {  // jobs: [id, x, y, w, h]
+  const scale = ctx.getTransform().a;
   for (let i = 0; i < jobs.length; i += 8) {
     await Promise.all(jobs.slice(i, i + 8).map(async ([id, x, y, w, h]) => {
-      try { const bm = await createImageBitmap(imOf(id).blob); drawCover(ctx, bm, bm.width, bm.height, x, y, w, h); bm.close(); } catch {}
+      // the small copy is enough when the cell in the picture is not bigger than it
+      const im = imOf(id), blob = im.tblob && Math.max(w, h) * scale <= THUMB ? im.tblob : im.blob;
+      try { const bm = await createImageBitmap(blob); drawCover(ctx, bm, bm.width, bm.height, x, y, w, h); bm.close(); } catch {}
     }));
   }
 }
@@ -984,6 +1079,7 @@ function showPair() {
     const im = imOf(pair[i]); c.querySelector('img').src = im.url; c.querySelector('.nm').textContent = im.name;
   });
   updateStats();
+  twPaint();
 }
 function updateStats() {
   renderCmpTop();
@@ -1003,12 +1099,18 @@ function eloMatch(a, b, sa) {
   A.n++; B.n++;
   if (sa === 1) { A.w++; B.l++; } else if (sa === 0) { A.l++; B.w++; } else { A.d++; B.d++; }
   state.cmpCount = (state.cmpCount || 0) + 1;
+  snap.s = sa;  // the result, for the statistics
   return snap;
 }
 function vote(res) {  // 0 = left wins, 1 = right wins, 0.5 = draw
   if (!pair) return;
   const [a, b] = pair;
-  state.history.push(eloMatch(a, b, res === 0 ? 1 : res === 1 ? 0 : .5));
+  const h = eloMatch(a, b, res === 0 ? 1 : res === 1 ? 0 : .5);
+  // who is first after this vote: the statistics show who held the top the longest
+  let lead = null;
+  for (const id of scopeBase()) if (state.elo[id]?.n && (!lead || state.elo[id].r > state.elo[lead].r)) lead = id;
+  if (lead) { state.lead ||= {}; state.lead[lead] = (state.lead[lead] || 0) + 1; h.lead = lead; }
+  state.history.push(h);
   if (state.history.length > 1000) state.history.shift();
   recent.push(pkey(a, b)); if (recent.length > 60) recent.shift();
   if (res !== .5) { const c = document.querySelectorAll('#arena .card')[res]; c.classList.add('pick'); setTimeout(() => c.classList.remove('pick'), 120); }
@@ -1018,6 +1120,7 @@ function skip() { if (pair) { recent.push(pkey(...pair)); if (recent.length > 60
 function undo() {
   const h = state.history.pop(); if (!h) { toast(t('t_nothing_undo')); return; }
   state.elo[h.a] = h.A; state.elo[h.b] = h.B;
+  if (h.lead && state.lead?.[h.lead]) state.lead[h.lead]--;
   state.cmpCount = Math.max(0, (state.cmpCount || 0) - 1);
   pair = [h.a, h.b]; save(); showPair();
 }
@@ -1027,7 +1130,7 @@ $('#skipBtn').onclick = skip;
 $('#undoBtn').onclick = undo;
 $('#resetElo').onclick = async () => {
   if (!await ask(t('c_reset_elo'))) return;
-  state.elo = {}; state.history = []; state.cmpCount = 0; recent.length = 0; pair = null; save(); showPair();
+  state.elo = {}; state.history = []; state.lead = {}; state.cmpCount = 0; recent.length = 0; pair = null; save(); showPair();
 };
 
 /* ================= results ================= */
@@ -1037,7 +1140,19 @@ function resIds() {
   const un = state.settings.showUnrated ? ids.filter(id => eloOf(id).n === 0) : [];
   return {rated, un};
 }
+// Results has two pages: the ranking grid and the statistics
 function renderResults() {
+  const stats = state.resMode === 'stats';
+  $('#view-res').classList.toggle('mode-stats', stats);
+  document.querySelectorAll('#resMode button').forEach(b => b.classList.toggle('on', b.dataset.mode === (stats ? 'stats' : 'rank')));
+  if (stats) renderStats($('#statsPanel')); else renderRanking();
+}
+$('#resMode').onclick = e => { const b = e.target.closest('[data-mode]'); if (!b) return; state.resMode = b.dataset.mode; save(); renderResults(); };
+$('#groupBtn').onclick = () => openGroup();
+$('#steamBtn').onclick = () => openSteamImport();
+$('#shareBtn').onclick = () => openShare();
+document.querySelectorAll('.tw-btn').forEach(b => b.onclick = () => openTwitch());
+function renderRanking() {
   const {rated, un} = resIds(), g = $('#grid'), frag = document.createDocumentFragment();
   [...rated, ...un].forEach((id, i) => {
     const im = imOf(id), e = eloOf(id), isR = i < rated.length;
@@ -1045,13 +1160,13 @@ function renderResults() {
     d.className = 'gitem' + (isR ? (i < 3 ? ' top' + (i + 1) : '') : ' unrated'); d.dataset.id = id;
     d.title = isR ? t('tip_rank', {name: im.name, i: i + 1, r: Math.round(e.r), w: e.w, l: e.l, d: e.d}) : t('tip_unrated', {name: im.name});
     d.innerHTML = (isR ? `<span class="rank">${i + 1}</span>` : '') + `<img alt="" draggable="false" loading="lazy"><div class="cap"></div>`;
-    d.querySelector('img').src = im.url; d.querySelector('.cap').textContent = im.name;
+    d.querySelector('img').src = im.turl || im.url; d.querySelector('.cap').textContent = im.name;
     frag.appendChild(d);
   });
   g.replaceChildren(frag);
   $('#resInfo').textContent = t('res_rated', {n: rated.length}) + (un.length ? t('res_unrated', {n: un.length}) : '') + t('res_scope');
 }
-$('#showUnrated').onchange = e => { state.settings.showUnrated = e.target.checked; save(); renderResults(); };
+$('#showUnrated').onchange = e => { state.settings.showUnrated = e.target.checked; save(); renderRanking(); };
 $('#resPng').onclick = async () => {
   const {rated} = resIds();
   if (!rated.length) { toast(t('t_compare_first')); return; }
@@ -1128,7 +1243,8 @@ function showZoom(id) {
   zoomId = id;
   const img = zoom.querySelector('img'); img.onload = placeZoom; img.src = im.url;
   zoom.querySelector('.zoom-name').textContent = im.name;
-  const n = zoom.querySelector('.zoom-note'); n.textContent = im.note || ''; n.hidden = !im.note;
+  const n = zoom.querySelector('.zoom-note'), info = [playInfo(im), im.note].filter(Boolean).join('\n');
+  n.textContent = info; n.hidden = !info;
   zoom.hidden = false; placeZoom();
 }
 document.addEventListener('mouseover', e => {
@@ -1153,7 +1269,7 @@ function renderCmpTop() {
   for (const id of ids) {
     const im = imOf(id), li = document.createElement('li');
     li.innerHTML = '<img alt="" loading="lazy"><span></span>';
-    li.querySelector('img').src = im.url; li.querySelector('span').textContent = im.name; li.title = tipOf(im);
+    li.querySelector('img').src = im.turl || im.url; li.querySelector('span').textContent = im.name; li.title = tipOf(im);
     ol.appendChild(li);
   }
   box.replaceChildren(h, ol);
@@ -1179,6 +1295,7 @@ function openCard(id) {
     const place = Object.keys(state.elo).filter(k => images.has(k) && state.elo[k].n).sort((a, b) => state.elo[b].r - state.elo[a].r).indexOf(id) + 1;
     body.querySelector('.card-rating').textContent = t('card_rating', {i: place, r: Math.round(e.r), w: e.w, l: e.l, d: e.d});
   } else body.querySelector('.card-rating').textContent = t('card_unrated');
+  if (im.steam) body.querySelector('.card-rating').textContent += '\n' + playInfo(im);
   body.querySelector('.card-move-lbl').textContent = t('card_move');
   const here = state.pool.includes(id) ? 'pool' : state.tiers.find(x => x.items.includes(id))?.id;
   const rows = body.querySelector('.card-rows');
@@ -1191,7 +1308,7 @@ function openCard(id) {
   del.onclick = async () => { closeDialog(); if (await ask(t('c_delete', {n: 1}), t('sel_del'))) deleteImages([id]); };
   dialog({title: t('card_title'), body, wide: true, onOk: apply});
 }
-const tipOf = im => im.note ? `${im.name}\n${im.note}` : im.name;
+const tipOf = im => [im.name, playInfo(im), im.note].filter(Boolean).join('\n');
 // saves a new name and/or note of an image; an empty name keeps the old one
 async function updateImage(id, {name, note}) {
   const im = images.get(id); if (!im) return;
@@ -1199,8 +1316,7 @@ async function updateImage(id, {name, note}) {
   note = String(note ?? im.note ?? '').trim();
   if (name === im.name && note === (im.note || '')) return;
   im.name = name; im.note = note;
-  const {url, ...rec} = im;
-  if (keepBlobs()) await tx('images', 'readwrite', s => s.put(rec));
+  if (keepBlobs()) await tx('images', 'readwrite', s => s.put(recOf(im)));
   scheduleFolder();
   const e = els.get(id); if (e) { e.title = tipOf(im); e.querySelector('.cap').textContent = name; }
   if (view === 'res') renderResults();
@@ -1339,6 +1455,11 @@ setLang(detectLang());
   reconcile();
   await spinLoad();
   state.ownSet = ownIds(); state.cmpSrc ||= 'tier'; tcfg().src ||= 'tier';
+  await loadThumbs();
   renderProjects(); updateUndoBtns(); remindBackup();
   applySettings(); renderAll(); setView(state.view || 'tier'); refreshSrc();
+  // a group list that was just made opens with its statistics
+  if (state.group?.fresh) { delete state.group.fresh; openStats(); }
+  twPaint();
+  checkShareLink();
 })();

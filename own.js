@@ -55,6 +55,7 @@ async function addOwnFiles(files) {
   (state.ownSet ||= []).push(...added);
   pair = null; save(); refreshSrc();
   toast(t('t_added', {n: added.length}));
+  queueThumbs(fresh.map(r => r.id));
 }
 
 async function clearOwn() {

@@ -53,7 +53,7 @@ async function syncFolder() {
       for (const r of map.values()) { const f = fileOf(r); want.add(f); if (!have.has(f)) await writeFile(dir, f, r.blob); }
       for (const f of have) if (!want.has(f)) await dir.removeEntry(f).catch(() => {});
     }
-    const list = map => [...map.values()].map(r => ({id: r.id, name: r.name, note: r.note || '', key: r.key, type: r.blob.type, file: fileOf(r)}));
+    const list = map => [...map.values()].map(r => ({id: r.id, name: r.name, note: r.note || '', key: r.key, steam: r.steam, type: r.blob.type, file: fileOf(r)}));
     await writeFile(dirHandle, 'tierlist.json', JSON.stringify({format: FILE_FORMAT, version: 2, name: projName(curProj()), state, images: list(images), spin: list(simgs)}));
   } catch (e) { ok = false; toast(t('t_folder_fail', {e: e.message || e}), 6000); }
   folderBusy = false;
@@ -91,7 +91,7 @@ async function loadFolderImages(p) {
     try {
       if (!dirHandle) throw new Error('no folder');
       const {images: recs} = await readFolder(dirHandle);
-      recs.forEach(r => images.set(r.id, {id: r.id, project: p.id, name: r.name, note: r.note, key: r.key, blob: r.blob, url: URL.createObjectURL(r.blob)}));
+      recs.forEach(r => images.set(r.id, {id: r.id, project: p.id, name: r.name, note: r.note, key: r.key, ...(r.steam && {steam: r.steam}), blob: r.blob, url: URL.createObjectURL(r.blob)}));
       return true;
     } catch {
       // the folder was moved or deleted: let the user point at it again
@@ -145,9 +145,10 @@ async function setFolderOnly(on) {
     const dir = await dirHandle.getDirectoryHandle('images'), have = await fileNames(dir);
     if ([...images.values()].some(r => !have.has(fileOf(r)))) { toast(t('t_folder_fail', {e: 'images'}), 6000); return; }
     await tx('images', 'readwrite', s => images.forEach((r, id) => s.delete(id)));
+    await tx('thumbs', 'readwrite', s => images.forEach((r, id) => s.delete(id)));
     p.dirOnly = true;
   } else {
-    await tx('images', 'readwrite', s => images.forEach(({url, ...r}) => s.put({...r, project})));
+    await tx('images', 'readwrite', s => images.forEach(r => s.put({...recOf(r), project})));
     delete p.dirOnly;
   }
   await saveMeta();
@@ -191,11 +192,19 @@ async function openStorage() {
 async function cleanLeftovers() {
   const ids = new Set(meta.projects.map(p => p.id));
   let n = 0;
+  const alive = new Set();
   for (const store of ['images', 'spin']) {
+    const all = await tx(store, 'readonly', s => s.getAllKeys());
     const dead = (await tx(store, 'readonly', s => s.getAll())).filter(r => !ids.has(projOf(r))).map(r => r.id);
     n += dead.length;
     await tx(store, 'readwrite', s => dead.forEach(id => s.delete(id)));
+    const d = new Set(dead); all.forEach(id => d.has(id) || alive.add(id));
   }
+  // small copies of pictures that are gone; the open list may be kept in a folder, so its pictures count as alive
+  images.forEach((r, id) => alive.add(id));
+  const deadThumbs = (await tx('thumbs', 'readonly', s => s.getAllKeys())).filter(id => !alive.has(id));
+  await tx('thumbs', 'readwrite', s => deadThumbs.forEach(id => s.delete(id)));
+  n += deadThumbs.length;
   const keys = await tx('kv', 'readonly', s => s.getAllKeys());
   const deadKeys = keys.filter(k => /^(state|dir):/.test(k) && !ids.has(k.split(':')[1]));
   n += deadKeys.length;

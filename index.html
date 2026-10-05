@@ -26,6 +26,9 @@
         <button data-act="importProj" data-i18n="imp"></button>
         <button data-act="storage" data-i18n="storage"></button>
         <hr>
+        <button data-act="group" data-i18n="grp_menu"></button>
+        <button data-act="common" data-i18n="cg_menu"></button>
+        <hr>
         <label class="menu-row"><span data-i18n="theme"></span>
           <select id="theme">
         <option value="dark" data-i18n="theme_dark"></option>
@@ -81,6 +84,7 @@
     </span>
     <button class="btn tier-only" id="presentBtn" data-i18n="present"></button>
     <button class="btn tier-only" id="revealBtn" data-i18n="reveal_btn" data-i18n-title="reveal_tip"></button>
+    <button class="btn tier-only" id="shareBtn" data-i18n="sh_btn" hidden></button>
     <button class="btn primary tier-only" id="pngBtn" data-i18n="png"></button>
  </div>
 </header>
@@ -102,11 +106,14 @@
         <option value="rating" data-i18n="sort_rating"></option>
         <option value="new" data-i18n="sort_new"></option>
         <option value="old" data-i18n="sort_old"></option>
+        <option value="played" class="steam-opt" data-i18n="sort_played" hidden></option>
+        <option value="recent" class="steam-opt" data-i18n="sort_recent" hidden></option>
         <option value="shuffle" data-i18n="shuffle"></option>
       </select>
       <span class="spacer"></span>
       <button class="btn primary" id="addFilesBtn" data-i18n="add_files"></button>
       <button class="btn primary" id="addDirBtn" data-i18n="add_folder"></button>
+      <button class="btn" id="steamBtn" data-i18n="st_imp_btn"></button>
       <button class="btn" id="resetBtn" data-i18n="reset"></button>
       <button class="btn danger" id="wipeBtn" data-i18n="wipe"></button>
       <input type="file" id="fFiles" multiple accept="image/*" hidden>
@@ -133,6 +140,7 @@
     </span>
     <label><span data-i18n="top_only"></span> <input type="number" id="topN" min="0" step="5" style="width:70px"> <span class="muted" data-i18n="top_hint"></span></label>
     <span class="spacer"></span>
+    <button class="btn tw-btn" data-i18n="tw_btn"></button>
     <button class="btn" id="undoBtn" data-i18n="undo"></button>
     <button class="btn danger" id="resetElo" data-i18n="reset_elo"></button>
   </div>
@@ -159,13 +167,19 @@
 <!-- ============ RESULTS ============ -->
 <section class="view" id="view-res">
   <div class="bar">
-    <span id="resInfo" class="muted"></span>
-    <label><input type="checkbox" id="showUnrated" checked> <span data-i18n="show_unrated"></span></label>
+    <div class="seg" id="resMode">
+      <button data-mode="rank" data-i18n="res_rank"></button>
+      <button data-mode="stats" data-i18n="sx_title"></button>
+    </div>
+    <span id="resInfo" class="muted rank-only"></span>
+    <label class="rank-only"><input type="checkbox" id="showUnrated" checked> <span data-i18n="show_unrated"></span></label>
     <span class="spacer"></span>
-    <button class="btn" id="autoTier" data-i18n="auto_btn"></button>
-    <button class="btn primary" id="resPng" data-i18n="png"></button>
+    <button class="btn rank-only" id="autoTier" data-i18n="auto_btn"></button>
+    <button class="btn primary rank-only" id="resPng" data-i18n="png"></button>
+    <button class="btn stats-only" id="groupBtn" data-i18n="grp_menu"></button>
   </div>
-  <div class="grid scroll" id="grid"></div>
+  <div class="grid scroll rank-only" id="grid"></div>
+  <div class="stats-panel scroll stats-only" id="statsPanel"></div>
 </section>
 
 <!-- ============ TOURNAMENT ============ -->
@@ -188,6 +202,7 @@
     </label>
     <label><input type="checkbox" id="tourElo"> <span data-i18n="tour_elo"></span></label>
     <span class="spacer"></span>
+    <button class="btn tw-btn" data-i18n="tw_btn"></button>
     <button class="btn" id="tourUndo" data-i18n="undo"></button>
     <button class="btn primary" id="tourStart" data-i18n="tour_start"></button>
   </div>
@@ -298,6 +313,10 @@
 <script src="tour.js"></script>
 <script src="folder.js"></script>
 <script src="own.js"></script>
+<script src="stats.js"></script>
+<script src="steam.js"></script>
+<script src="share.js"></script>
+<script src="twitch.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

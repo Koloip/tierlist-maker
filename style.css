@@ -587,3 +587,119 @@ html[data-theme=pro]{--bg:#111214;--panel:#17181b;--text:#e4e5e7;--muted:#8b8e95
 [data-theme=pro] .tour-round b{font-size:16px;font-weight:600}
 
 #donateLink::before{content:"\2665";color:#e5787b;margin-right:7px}
+
+/* ---------- statistics & group list ---------- */
+.card-rating{white-space:pre-line}
+.sx{padding-right:10px}
+.sx h4{margin:18px 0 8px;font-size:14px}
+.sx-hint{font-size:13px;margin:0 0 8px;max-width:640px}
+.sx-tiles{display:flex;flex-wrap:wrap;gap:8px}
+.sx-tile{flex:1 1 110px;background:var(--hover,rgba(127,127,127,.16));border:1px solid var(--line,rgba(127,127,127,.28));border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:2px}
+.sx-tile b{font-size:22px;font-variant-numeric:tabular-nums}
+.sx-tile span{font-size:12px;color:var(--muted)}
+.sx-bars{display:flex;flex-direction:column;gap:5px}
+.sx-bar{display:grid;grid-template-columns:minmax(44px,max-content) 1fr minmax(90px,max-content);align-items:center;gap:10px;font-size:13px}
+.sx-lbl{color:#111;font-weight:700;border-radius:4px;padding:2px 8px;text-align:center;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sx-pair{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sx-track{height:12px;background:var(--hover,rgba(127,127,127,.16));border-radius:6px;overflow:hidden}
+.sx-fill{height:100%;background:var(--accent);border-radius:6px;min-width:2px}
+.sx-num{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.sx-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.sx-list li{display:flex;align-items:center;gap:10px;font-size:13px}
+.sx-list img{width:34px;height:44px;object-fit:cover;border-radius:4px;flex:none;background:var(--hover,rgba(127,127,127,.16))}
+.sx-txt{display:flex;flex-direction:column;min-width:0;flex:1}
+.sx-name,.sx-sub{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sx-sub{font-size:12px}
+.sx-chip{color:#111;font-weight:700;font-size:12px;border-radius:4px;padding:2px 8px;flex:none;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.grp-list{display:flex;flex-direction:column;gap:6px;margin:8px 0}
+.grp-row{display:flex;align-items:center;gap:8px}
+.grp-row .dlg-input{width:180px;margin:0}
+.grp-row input[type=checkbox]{width:18px;height:18px;margin:0 7px}
+@media (max-width:600px){ .sx-bar{grid-template-columns:auto 1fr} .sx-num{grid-column:1/-1} .grp-row{flex-wrap:wrap} }
+/* ---------- results: ranking / statistics switch, Steam import ---------- */
+.seg{display:inline-flex;border:1px solid var(--line,rgba(127,127,127,.35));border-radius:7px;overflow:hidden;flex:none}
+.seg button{background:none;border:0;color:var(--muted);padding:6px 12px;font:inherit;cursor:pointer}
+.seg button+button{border-left:1px solid var(--line,rgba(127,127,127,.35))}
+.seg button.on{background:var(--accent);color:#fff}
+#view-res.mode-stats .rank-only,#view-res:not(.mode-stats) .stats-only{display:none!important}
+.stats-panel{flex:1;overflow:auto;padding:16px}
+.stats-panel .sx{max-width:860px;margin:0 auto}
+.stats-panel .sx>h4:first-child{margin-top:0}
+.steam-step{margin:14px 0;display:flex;flex-direction:column;gap:6px}
+.steam-path{display:flex;align-items:center;gap:6px}
+.steam-path code{background:var(--hover,rgba(127,127,127,.16));padding:5px 8px;border-radius:5px;font-size:12.5px;word-break:break-all;flex:1}
+/* ---------- statistics, roomier layout ---------- */
+.stats-panel{padding:20px 24px}
+.stats-panel .sx{max-width:1280px;font-size:15px;padding:0}
+.sx-tiles{gap:12px;margin-bottom:16px}
+.sx-tile{flex:1 1 150px;padding:14px 18px;border-radius:12px}
+.sx-tile b{font-size:32px;line-height:1.15}
+.sx-tile span{font-size:14px}
+.sx-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(400px,1fr));gap:16px;align-items:start}
+.sx-card{background:var(--panel);border:1px solid var(--line,rgba(127,127,127,.25));border-radius:12px;padding:16px 18px;min-width:0}
+.sx-card.wide{grid-column:1/-1}
+.sx-card h4{margin:0 0 12px;font-size:17px}
+.sx-card .sx-hint{font-size:14px;margin:10px 0 0}
+.sx-card>.btn{margin-top:10px}
+.sx-bar{font-size:14px;gap:12px}
+.sx-lbl{font-size:14px;padding:3px 10px}
+.sx-track{height:16px;border-radius:8px}
+.sx-list{gap:8px}
+.sx-list li{font-size:15px;gap:12px}
+.sx-list img{width:46px;height:62px;border-radius:5px}
+.sx-name{font-weight:600}
+.sx-sub{font-size:13.5px}
+.sx-chip{font-size:13px;padding:3px 10px}
+.sx-rank{flex:none;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:14px;background:var(--hover,rgba(127,127,127,.18))}
+.sx-rank.r1{background:#c9a227;color:#111}.sx-rank.r2{background:#b8b8b8;color:#111}.sx-rank.r3{background:#b0703a;color:#111}
+.sx-facts{display:grid;grid-template-columns:repeat(2,1fr);gap:12px 18px;margin-bottom:14px}
+.sx-facts div{display:flex;flex-direction:column}
+.sx-facts b{font-size:24px;font-variant-numeric:tabular-nums}
+.sx-facts span{font-size:13.5px}
+.sx-progress{height:12px}
+.sx-hist{display:flex;align-items:flex-end;gap:4px;height:170px;padding-top:18px}
+.sx-col{flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;min-width:0}
+.sx-colbar{width:100%;background:var(--accent);border-radius:4px 4px 0 0;min-height:2px}
+.sx-colnum{font-size:12px;color:var(--muted);margin-bottom:3px}
+.sx-axis{display:flex;justify-content:space-between;font-size:12.5px;color:var(--muted);margin-top:4px;border-top:1px solid var(--line,rgba(127,127,127,.3));padding-top:4px}
+@media (max-width:600px){ .stats-panel{padding:12px} .sx-grid{grid-template-columns:1fr} .sx-tile b{font-size:24px} }
+/* statistics: cards flow in columns like a masonry wall, no holes */
+.sx-grid{display:block;columns:400px;column-gap:16px}
+.sx-card{break-inside:avoid;margin-bottom:16px;display:block}
+.sx-card.wide{column-span:all}
+.sx-label{font-size:12.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+@media (max-width:600px){ .sx-grid{columns:1} }.sx-sub{white-space:normal}
+.steam-rest{font-size:14px}
+.steam-path .btn{flex:none}
+.grp-mode{display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap}
+
+/* ---------- Twitch voting, share link ---------- */
+#arena .card,#tourStage .card{position:relative}
+.tw-badge{position:absolute;left:10px;right:10px;bottom:44px;background:rgba(0,0,0,.78);color:#fff;border-radius:10px;padding:8px 12px 12px;display:flex;align-items:baseline;gap:10px;pointer-events:none;overflow:hidden}
+.tw-badge b{font-size:28px;line-height:1;font-variant-numeric:tabular-nums}
+.tw-badge span{font-size:15px;opacity:.85}
+.tw-badge i{position:absolute;left:0;bottom:0;height:5px;background:#9146ff;transition:width .3s}
+.tw-badge.lead{box-shadow:inset 0 0 0 2px #9146ff}
+.tw-btn.on{border-color:#9146ff;color:#c7a6ff}
+.tw-row{display:flex;align-items:center;gap:10px;margin:10px 0;flex-wrap:wrap}
+.tw-row .dlg-input{flex:1;min-width:180px;margin:0}
+.share-link{font-family:ui-monospace,Consolas,monospace;font-size:12.5px;word-break:break-all;resize:vertical;margin-top:10px}
+.share-warn{color:#e5a03b}.common-games h4{margin:18px 0 6px;font-size:15px}
+.cg-who{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.cg-chip{background:var(--hover,rgba(127,127,127,.2));color:var(--text)}
+.cg-res{font-size:15px;font-weight:600;margin:6px 0 0}
+.steam-common{margin-top:14px;align-items:center}
+textarea.share-link{background:var(--bg);color:var(--text);border:1px solid var(--line,rgba(127,127,127,.35))}
+.cg-how{margin:0 0 10px;padding-left:22px;display:flex;flex-direction:column;gap:6px;font-size:14px;line-height:1.45}
+.cg-how{padding-left:30px}
+.steam-drop{border:2px dashed transparent;border-radius:10px;padding:8px 10px;margin-left:-12px;margin-right:-12px;transition:border-color .15s}
+.steam-drop.over{border-color:var(--accent)}
+.steam-drop.ok{border-color:rgba(80,200,120,.5)}
+.steam-status{font-weight:600;color:#5fcf8a}
+.steam-status.bad{color:#e5787b}
+.cg-add{display:flex;gap:8px;align-items:center}
+.cg-add .dlg-input{flex:1;margin:0;min-width:0}
+.cg-list{display:flex;flex-direction:column;gap:6px;margin:10px 0}
+.cg-person{display:flex;align-items:center;gap:10px;padding:6px 6px 6px 12px;border-radius:8px;background:var(--hover,rgba(127,127,127,.14))}
+.cg-person b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.steam-drop{margin-left:0;margin-right:0}

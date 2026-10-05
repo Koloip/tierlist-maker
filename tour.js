@@ -157,6 +157,7 @@ function renderTour() {
     stage.querySelector('#tourAgain').textContent = t('tour_start');
   }
   renderBracket(cur);
+  twPaint();
 }
 function renderBracket(cur) {
   const T = state.tour, frag = document.createDocumentFragment();
@@ -171,7 +172,7 @@ function renderBracket(cur) {
         const p = document.createElement('div'), im = tourIm(id);
         p.className = 'bp' + (mt.w && id ? (mt.w === id ? ' bwin' : ' blose') : '');
         p.innerHTML = `<span class="bth">${im ? '<img alt="" loading="lazy">' : ''}</span><span class="bnm"></span>`;
-        if (im) p.querySelector('img').src = im.url;
+        if (im) p.querySelector('img').src = im.turl || im.url;
         p.querySelector('.bnm').textContent = im ? im.name : id ? '—' : '';
         box.appendChild(p);
       }

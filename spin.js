@@ -211,6 +211,7 @@ async function gcSpinImages() {
   const used = new Set([...MODES.flatMap(m => cfg(m).items.map(it => it.img)), cfg('case').bg, cfg('case').snd, ...(state.ownSet || [])].filter(Boolean));
   const dead = [...simgs.keys()].filter(id => !used.has(id));
   if (!dead.length) return;
+  dropThumbs(dead);
   dead.forEach(id => { URL.revokeObjectURL(simgs.get(id).url); simgs.delete(id); thumbs.delete(id); });
   await tx('spin', 'readwrite', s => dead.forEach(id => s.delete(id))).catch(() => {});
 }
@@ -311,7 +312,7 @@ function renderSpinList(m) {
     row.querySelector('.son').title = t('sp_toggle');
     row.querySelector('.pctw').title = t('sp_chance');
     row.querySelector('.sdel').title = t('sp_del');
-    if (im) { row.querySelector('img').src = im.url; row.querySelector('.sthumb').title = im.name; }
+    if (im) { row.querySelector('img').src = im.turl || im.url; row.querySelector('.sthumb').title = im.name; }
     const cap = row.querySelector('.scap'); cap.value = it.cap; cap.placeholder = t(im ? 'sp_cap_ph' : 'sp_text_ph');
     if (m === 'case') paintRarity(row.querySelector('.rar'), it);
     frag.appendChild(row);
@@ -569,7 +570,7 @@ function caseCard(it) {
   const d = document.createElement('div'), im = imOf(it.img);
   d.className = 'ccard'; d.style.setProperty('--rc', RARITIES[it.r || 0].c);
   if (im) {
-    const img = new Image(); img.src = im.url; img.alt = ''; img.draggable = false; img.decoding = 'async'; d.appendChild(img);
+    const img = new Image(); img.src = im.turl || im.url; img.alt = ''; img.draggable = false; img.decoding = 'async'; d.appendChild(img);
     if (it.cap) { const cap = document.createElement('div'); cap.className = 'ccap'; cap.textContent = it.cap; d.appendChild(cap); }
   } else {
     const x = document.createElement('div'); x.className = 'ctext'; x.textContent = it.cap; d.appendChild(x);
@@ -672,7 +673,7 @@ function renderHist(m) {
     const row = document.createElement('div'), im = imOf(h.img);
     row.className = 'hrow'; if (m === 'case') row.style.setProperty('--rc', RARITIES[h.r].c);
     row.innerHTML = `<div class="sthumb">${im ? '<img alt="" loading="lazy">' : 'Aa'}</div><span class="hname"></span><span class="muted htime"></span>`;
-    if (im) row.querySelector('img').src = im.url;
+    if (im) row.querySelector('img').src = im.turl || im.url;
     row.querySelector('.hname').textContent = h.cap || '—';
     row.querySelector('.htime').textContent = fmt.format(h.at);
     return row;
