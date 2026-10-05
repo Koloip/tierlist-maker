@@ -15,12 +15,24 @@ async function packShare(obj) {
   let bin = ''; for (let i = 0; i < u8.length; i += 0x8000) bin += String.fromCharCode(...u8.subarray(i, i + 0x8000));
   return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
+// a link can be crafted to inflate into gigabytes, so unpacking stops at 1 MB (a real one is a few KB)
+const SHARE_MAX_BYTES = 1 << 20, SHARE_MAX_GAMES = 5000;
 async function unpackShare(s) {
   const bin = atob(s.replace(/-/g, '+').replace(/_/g, '/'));
   const u8 = Uint8Array.from(bin, ch => ch.charCodeAt(0));
-  const z = new Blob([u8]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
-  return JSON.parse(await new Response(z).text());
+  const reader = new Blob([u8]).stream().pipeThrough(new DecompressionStream('deflate-raw')).getReader();
+  const parts = []; let size = 0;
+  for (;;) {
+    const {done, value} = await reader.read();
+    if (done) break;
+    size += value.length;
+    if (size > SHARE_MAX_BYTES) { reader.cancel(); throw new Error('too big'); }
+    parts.push(value);
+  }
+  return JSON.parse(await new Blob(parts).text());
 }
+// game numbers from a link: whole positive numbers only, and not more than a real library has
+const cleanIds = list => (Array.isArray(list) ? list : []).filter(id => Number.isInteger(id) && id > 0 && id < 1e8).slice(0, SHARE_MAX_GAMES);
 const shareBase = () => location.protocol.startsWith('http') ? location.origin + location.pathname : SHARE_SITE;
 const appOf = id => images.get(id)?.steam?.appid;
 
@@ -73,7 +85,7 @@ async function gamesFromText(text) {
     seen.add(m[1]);
     try {
       const d = await unpackShare(m[1]);
-      let x = 0; const ids = (d.g || []).map(v => x += v);
+      let x = 0; const ids = cleanIds((Array.isArray(d.g) ? d.g : []).slice(0, SHARE_MAX_GAMES).map(v => x += +v));
       if (ids.length) out.push({code: m[1], n: String(d.n || '').slice(0, 40), ids});
     } catch {}
   }
@@ -199,7 +211,13 @@ async function checkShareLink() {
   // the link is used once; a reload must not open it again
   history.replaceState(null, '', location.pathname + location.search);
   let data;
-  try { data = await unpackShare(code); if (!Array.isArray(data.r)) throw 0; } catch { toast(t('sh_bad'), 5000); return; }
+  try {
+    data = await unpackShare(code);
+    if (!Array.isArray(data.r)) throw 0;
+    // only the expected shape goes on: at most 30 rows, plain text labels, game numbers
+    data = {n: String(data.n || 'Steam').slice(0, 80), p: cleanIds(data.p),
+      r: data.r.slice(0, 30).map(x => [String(x?.[0] ?? '').slice(0, 200), String(x?.[1] ?? ''), cleanIds(x?.[2])])};
+  } catch { toast(t('sh_bad'), 5000); return; }
   const n = data.r.reduce((a, x) => a + x[2].length, 0) + (data.p || []).length;
   const body = sxEl('p', 'muted', t('sh_open_body', {n, r: data.r.filter(x => x[2].length).length}));
   dialog({title: t('sh_open_title', {name: data.n || 'Steam'}), body, ok: t('sh_open'), onOk: () => { openShared(data); }});
@@ -207,7 +225,7 @@ async function checkShareLink() {
 addEventListener('hashchange', checkShareLink);
 
 async function openShared(data) {
-  const all = [...new Set([...data.r.flatMap(x => x[2]), ...(data.p || [])])].filter(id => Number.isInteger(id) && id > 0);
+  const all = cleanIds([...new Set([...data.r.flatMap(x => x[2]), ...(data.p || [])])]);
   const apps = new Map();
   await lookupApps(all, apps, 'sh_names');
   const games = all.filter(id => apps.get(id)?.name).map(id => steamGame(id, apps.get(id)));

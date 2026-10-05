@@ -3,6 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Only our own scripts may run, and the page talks only to Steam (covers), steamcmd.net (game names) and Twitch chat.
+     If some data ever slipped past the checks into the page as HTML, the browser would still refuse to run it. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' https://api.steamcmd.net https://shared.akamai.steamstatic.com wss://irc-ws.chat.twitch.tv; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>Tier List Maker</title>
 <meta name="description" content="Free, offline tier list maker with no image limit, plus a pairwise comparison mode. Your images never leave your browser.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect y='1' width='32' height='9' rx='2' fill='%23ff7f7f'/%3E%3Crect y='12' width='24' height='9' rx='2' fill='%23ffdf7f'/%3E%3Crect y='23' width='16' height='9' rx='2' fill='%23bfff7f'/%3E%3C/svg%3E">
