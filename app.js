@@ -705,6 +705,9 @@ document.addEventListener('drop', e => {
   if (dragIds) { e.preventDefault(); finishDrop(); return; }
   if (e.dataTransfer.types.includes('Files')) {
     e.preventDefault();
+    // a saved list dropped anywhere is opened, like ☰ → Open from file
+    const json = [...e.dataTransfer.files].find(f => /\.json$/i.test(f.name));
+    if (json) { importProj(json); return; }
     if (view === 'wheel' || view === 'case') { const m = view; filesFromDT(e.dataTransfer).then(files => addSpinFiles(files, m)); return; }
     if (['cmp', 'res', 'tour'].includes(view) && ownSource()) { filesFromDT(e.dataTransfer).then(addOwnFiles); return; }
     const box = view === 'tier' ? dropBox(e.target) : null;

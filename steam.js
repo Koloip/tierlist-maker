@@ -73,7 +73,7 @@ function localconfigStep(title, onFile) {
   box.ondragleave = () => box.classList.remove('over');
   box.ondrop = async e => { e.preventDefault(); e.stopPropagation(); box.classList.remove('over'); done(pickConfig(await configsFromDrop(e.dataTransfer))); };
   const row = sxEl('div', 'st-row'); row.append(pickDir, manual, status);
-  box.append(row, sxEl('div', 'muted sx-hint', t('st_drop')), dir, one);
+  box.append(row, sxEl('div', 'muted sx-hint', t('st_drop')), sxEl('div', 'muted sx-hint', t('st_manual_tip')), dir, one);
   return box;
 }
 // the newest */config/localconfig.vdf of a picked folder: {file, acc: account number}
