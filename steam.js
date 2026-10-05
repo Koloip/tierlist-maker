@@ -156,7 +156,8 @@ function steamGame(appid, c) {
 // downloads the covers 8 at a time; returns blobs in the order of games (null where none was found)
 async function steamCovers(games, label) {
   const load = async u => {
-    try { const r = await fetch(u); if (r.ok) { const b = await r.blob(); if (b.size > 2000) return b; } } catch {}
+    // only real pictures are kept, whatever the address turned out to point at
+    try { const r = await fetch(u); if (r.ok) { const b = await r.blob(); if (b.size > 2000 && /^image\/(jpeg|png|webp)$/.test(b.type)) return b; } } catch {}
     return null;
   };
   const get = async g => {

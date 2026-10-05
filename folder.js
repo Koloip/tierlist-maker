@@ -68,7 +68,7 @@ async function readFolder(h) {
   const read = async (sub, list) => {
     const dir = await h.getDirectoryHandle(sub).catch(() => null), out = [];
     for (const r of list || []) {
-      try { const f = await (await dir.getFileHandle(r.file)).getFile(); out.push({...r, blob: f.slice(0, f.size, r.type)}); } catch {}
+      try { const f = await (await dir.getFileHandle(r.file)).getFile(); out.push({...r, blob: f.slice(0, f.size, safeType(r.type))}); } catch {}
     }
     return out;
   };

@@ -231,7 +231,8 @@ function addFromTier(m) {
   const body = document.createElement('div'); body.className = 'pick-list';
   for (const l of lists) {
     const row = document.createElement('label'); row.className = 'chip';
-    row.innerHTML = `<input type="checkbox" checked><span class="dot" style="background:${l.color}"></span><span></span><span class="muted">${l.ids.length}</span>`;
+    row.innerHTML = `<input type="checkbox" checked><span class="dot"></span><span></span><span class="muted">${l.ids.length}</span>`;
+    row.querySelector('.dot').style.background = l.color;
     row.querySelector('span:nth-of-type(2)').textContent = l.name;
     row.querySelector('input').dataset.key = l.key;
     body.appendChild(row);

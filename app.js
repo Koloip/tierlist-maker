@@ -177,6 +177,11 @@ function download(blob, name) {
   setTimeout(() => URL.revokeObjectURL(a.href), 10000);
 }
 const fileSafe = s => (s || 'tierlist').replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 80) || 'tierlist';
+// Lists from files and links are other people's data. A row color goes into HTML, so only #rgb…#rrggbbaa passes;
+// a picture's type must be an image or a sound (never HTML or SVG, which could run a script if opened in a tab).
+const safeColor = c => /^#[0-9a-f]{3,8}$/i.test(String(c)) ? c : '#888888';
+const safeType = (type, fallback = 'image/jpeg') => /^(image\/(jpeg|png|gif|webp|avif|bmp)|audio\/[\w.+-]+)$/i.test(String(type)) ? type : fallback;
+function cleanState(s) { (s.tiers || []).forEach(x => { x.color = safeColor(x.color); x.label = String(x.label ?? ''); }); return s; }
 // what goes into the database: the in-memory record without its object URLs and the small copy
 const recOf = ({url, turl, tblob, ...r}) => r;
 
@@ -362,7 +367,7 @@ function blobToB64(blob) {
 function b64ToBlob(b64, type) {
   const bin = atob(b64), u8 = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
-  return new Blob([u8], {type: type || 'image/jpeg'});
+  return new Blob([u8], {type: safeType(type)});
 }
 async function exportProj() {
   toast(t('t_exporting'), 60000);
@@ -395,7 +400,7 @@ async function finishImport(data, imgsIn, spinsIn, fallbackName, folder = null) 
     return {id: nid, project: id, name: r.name, note: r.note || '', key: r.key, ...(r.steam && {steam: r.steam}), blob: r.blob};
   });
   const imgs = recs(imgsIn), spins = recs(spinsIn);
-  const s = data.state, reKeys = o => o && Object.fromEntries(Object.entries(o).map(([k, v]) => [re(k), v]));
+  const s = cleanState(data.state), reKeys = o => o && Object.fromEntries(Object.entries(o).map(([k, v]) => [re(k), v]));
   s.tiers = (s.tiers || []).map(x => ({...x, items: (x.items || []).map(re)}));
   s.pool = (s.pool || []).map(re);
   s.elo = reKeys(s.elo || {});
@@ -476,11 +481,12 @@ function renderTiers() {
   state.tiers.forEach((tier, i) => {
     const row = document.createElement('div');
     row.className = 'tier'; row.dataset.tier = tier.id;
-    row.innerHTML = `<div class="label" style="background:${tier.color}"><span class="kn">${i < 9 ? i + 1 : ''}</span><span class="txt"></span><span class="cnt"></span></div>
+    row.innerHTML = `<div class="label"><span class="kn">${i < 9 ? i + 1 : ''}</span><span class="txt"></span><span class="cnt"></span></div>
       <div class="items" data-list="${tier.id}"></div>
       <div class="ctrl"><button class="gear">${GEAR}</button>
         <div class="arrows"><button class="up">${UP}</button><button class="down">${DOWN}</button></div></div>`;
     row.querySelector('.txt').textContent = tier.label;
+    row.querySelector('.label').style.background = tier.color;
     row.querySelector('.label').draggable = !TOUCH;
     row.querySelector('.gear').title = t('row_settings');
     row.querySelector('.up').title = t('up');
@@ -1046,7 +1052,8 @@ function renderScope() {
   const box = $('#scope'); box.innerHTML = '';
   const add = (key, name, color, count) => {
     const l = document.createElement('label'); l.className = 'chip';
-    l.innerHTML = `<input type="checkbox"${state.scope[key] !== false ? ' checked' : ''}><span class="dot" style="background:${color}"></span><span></span><span class="muted">${count}</span>`;
+    l.innerHTML = `<input type="checkbox"${state.scope[key] !== false ? ' checked' : ''}><span class="dot"></span><span></span><span class="muted">${count}</span>`;
+    l.querySelector('.dot').style.background = color;
     l.querySelector('span:nth-of-type(2)').textContent = name;
     l.querySelector('input').onchange = e => { state.scope[key] = e.target.checked; save(); pair = null; showPair(); };
     box.appendChild(l);
@@ -1449,6 +1456,7 @@ setLang(detectLang());
     recs.forEach(r => images.set(r.id, {...r, url: URL.createObjectURL(r.blob)}));
   }
   state = await tx('kv', 'readonly', s => s.get(stateKey(project))) || defaultState(meta.projects.find(p => p.id === project)?.tpl);
+  cleanState(state);  // lists saved by older versions were not checked on import
   state.settings = {...DEFAULT_SETTINGS, ...state.settings};
   for (const k of ['elo', 'scope']) state[k] ||= {};
   state.history ||= [];

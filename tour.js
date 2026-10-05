@@ -32,7 +32,8 @@ function renderTourBar() {
   const c = tcfg(), box = $('#tourScope'); box.innerHTML = '';
   const add = (key, name, color, count) => {
     const l = document.createElement('label'); l.className = 'chip';
-    l.innerHTML = `<input type="checkbox"${c.scope[key] !== false ? ' checked' : ''}><span class="dot" style="background:${color}"></span><span></span><span class="muted">${count}</span>`;
+    l.innerHTML = `<input type="checkbox"${c.scope[key] !== false ? ' checked' : ''}><span class="dot"></span><span></span><span class="muted">${count}</span>`;
+    l.querySelector('.dot').style.background = color;
     l.querySelector('span:nth-of-type(2)').textContent = name;
     l.querySelector('input').onchange = e => { c.scope[key] = e.target.checked; save(); renderTourBar(); };
     box.appendChild(l);
